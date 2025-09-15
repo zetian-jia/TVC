@@ -14,6 +14,8 @@ use rayon::prelude::*;
 use std::fs::File;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use indicatif::{ProgressBar, ProgressStyle};
+
 
 #[derive(Parser, Debug)]
 #[command(name = "tvc", about = "A Taps Variant Caller")]
@@ -442,6 +444,11 @@ fn workflow(
 
     let chunks: Vec<GenomeChunk> = get_genome_chunks(ref_path, chunk_size);
 
+    let pb = ProgressBar::new(chunks.len() as u64);
+    pb.set_style(ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks")?
+        .progress_chars("#>-"));
+
 
 
     // Rayon thread pool
@@ -453,7 +460,7 @@ fn workflow(
     chunks
         .par_iter()
         .map(|chunk| {
-            call_variants(
+            let res = call_variants(
                 chunk,
                 bam_path,
                 seq_name_to_seq.get(&chunk.contig)
@@ -467,12 +474,15 @@ fn workflow(
             )
             .unwrap_or_else(|e| {
                 Vec::new()
-            })
+            });
+            pb.inc(1);
+            res
         })
         .flatten()
         .collect()
 });
 
+    pb.finish_with_message("Variant calling complete");
     println!("Found {} variants", all_variants.len());
 
 
