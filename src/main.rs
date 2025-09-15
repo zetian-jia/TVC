@@ -250,7 +250,7 @@ fn get_deletion_information(alignment: &Alignment) -> i32 {
     match alignment.indel() {
         Indel::None => 0,
         Indel::Del(len) => {
-            println!("Deletion length: {}", len);
+            println!("Read name {} Deletion length: {}", String::from_utf8_lossy(alignment.record().qname()), len);
             len as i32
         }
         Indel::Ins(_) => 0, // insertions are not deletions
