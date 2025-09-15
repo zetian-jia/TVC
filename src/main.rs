@@ -246,18 +246,24 @@ fn get_nm_tag(record: &bam::Record) -> u32 {
     }
 }
 
-fn get_deletion_information(alignment: &Alignment) -> i32 {
-    match alignment.indel() {
-        Indel::None => 0,
+fn get_deleted_bases(aln: &Alignment, ref_seq: &[u8], ref_pos: u32) -> Option<String> {
+    match aln.indel() {
         Indel::Del(len) => {
-            println!("Read name {} Deletion length: {}", String::from_utf8_lossy(alignment.record().qname()), len);
-            len as i32
+            // Safely slice the reference sequence
+            let index_start = ref_pos as usize;
+            let del_seq = ref_seq.get(index_start + 1..index_start + len as usize + 1)?;
+            println!("Deleted bases: {}", String::from_utf8_lossy(del_seq).to_string());
+            Some(String::from_utf8_lossy(del_seq).to_string())
         }
-        Indel::Ins(_) => 0, // insertions are not deletions
+        _ => None,
     }
 }
 
-fn extract_pileup_counts(pileup: &Pileup, min_bq: usize, min_mapq: usize, end_of_read_cutoff: usize, max_mismatches: u32) -> (HashMap<char, usize>, HashMap<char, usize>, HashMap<char, usize>) {
+
+
+
+
+fn extract_pileup_counts(pileup: &Pileup, min_bq: usize, min_mapq: usize, end_of_read_cutoff: usize, max_mismatches: u32, ref_seq: &Vec<u8>, ref_pos: u32) -> (HashMap<char, usize>, HashMap<char, usize>, HashMap<char, usize>) {
     let mut r_one_f_counts = HashMap::new();
     let mut r_one_r_counts = HashMap::new();
 
@@ -306,7 +312,7 @@ fn extract_pileup_counts(pileup: &Pileup, min_bq: usize, min_mapq: usize, end_of
                 continue;
             }
 
-            get_deletion_information(&alignment);
+            get_deleted_bases(&alignment, ref_seq, ref_pos);
            
             if record.is_reverse() && record.is_first_in_template() {
                 r_one_r_counts.insert(base, r_one_r_counts.get(&base).unwrap_or(&0) + 1);
@@ -443,7 +449,7 @@ fn call_variants(chunk: &GenomeChunk, bam_path: &str, ref_seq: &Vec<u8>,  min_bq
             continue;
         }
         
-        let (r_one_f_counts, r_one_r_counts, total_counts) = extract_pileup_counts(&pileup, min_bq, min_mapq, end_of_read_cutoff, max_mismatches);
+        let (r_one_f_counts, r_one_r_counts, total_counts) = extract_pileup_counts(&pileup, min_bq, min_mapq, end_of_read_cutoff, max_mismatches, ref_seq, pos);
         
         let mut all_found_alts: HashSet<char> = HashSet::new();
         all_found_alts.extend(r_one_f_counts.keys());
