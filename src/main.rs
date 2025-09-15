@@ -113,6 +113,7 @@ impl Variant {
     }
 }
 
+#[derive(Clone)]
 struct BaseCall {
     base: char,
     deleted_bases: Vec<u8>,
@@ -165,6 +166,10 @@ impl BaseCall {
             alt_allele.push_str(&String::from_utf8_lossy(&self.insertion_bases));
         }
         alt_allele
+    }
+
+    fn is_snp(&self) -> bool {
+        self.deleted_bases.is_empty() && self.insertion_bases.is_empty()
     }
 
 }
@@ -234,11 +239,14 @@ fn get_genome_chunks(
 
 
 
-fn find_where_to_call_variants(ref_base: char, alt_candidates: &HashSet<char>, upstream_base: char, downstream_base: char) -> String {
-    if (ref_base == 'C'|| alt_candidates.contains(&'C')) && downstream_base == 'G'{
+fn find_where_to_call_variants(ref_base: char, alt_candidates: &HashSet<BaseCall>, upstream_base: char, downstream_base: char) -> String {
+    
+    let alt_candidate_bases: HashSet<char> = alt_candidates.iter().map(|bc| bc.base).collect();
+    
+    if (ref_base == 'C'|| alt_candidate_bases.contains(&'C')) && downstream_base == 'G'{
         return  "OB".to_string();
     }
-    else if (ref_base == 'G'|| alt_candidates.contains(&'G')) && upstream_base == 'C'{
+    else if (ref_base == 'G'|| alt_candidate_bases.contains(&'G')) && upstream_base == 'C'{
         return  "OT".to_string();
     }
     return "BOTH".to_string();
@@ -276,19 +284,19 @@ fn right_tail_binomial_pval(n: u64, k: u64, p: f64) -> f64 {
     1.0 - cdf                          // P(X ≥ k)
 }
 
-fn get_count_vec_candidates(counts: &HashMap<char, usize>, ref_base: char) -> HashSet<char> {
+fn get_count_vec_candidates(counts: &HashMap<BaseCall, usize>, ref_base: char) -> HashSet<BaseCall> {
     let mut candidates = HashSet::new();
 
     let total_depth = counts.values().sum::<usize>() as u64;
     let p = 0.005; // Placeholder for the probability of success
-    for (&base, &count) in counts.iter() {
+    for (basecall, &count) in counts.iter() {
 
-        if base == ref_base || base == 'N' {
+        if (basecall.base == ref_base &&  basecall.is_snp())|| basecall.base == 'N' {
             continue;
         }
         let pval = right_tail_binomial_pval(total_depth, count as u64, p);
         if pval < 0.05 {
-            candidates.insert(base);
+            candidates.insert(basecall.clone());
         }
     
     }
@@ -339,7 +347,7 @@ fn get_nm_tag(record: &bam::Record) -> u32 {
 
 
 
-fn extract_pileup_counts(pileup: &Pileup, min_bq: usize, min_mapq: usize, end_of_read_cutoff: usize, max_mismatches: u32, ref_seq: &Vec<u8>, ref_pos: u32) -> (HashMap<char, usize>, HashMap<char, usize>, HashMap<char, usize>) {
+fn extract_pileup_counts(pileup: &Pileup, min_bq: usize, min_mapq: usize, end_of_read_cutoff: usize, max_mismatches: u32, ref_seq: &Vec<u8>, ref_pos: u32) -> (HashMap<BaseCall, usize>, HashMap<BaseCall, usize>, HashMap<BaseCall, usize>) {
     let mut r_one_f_counts = HashMap::new();
     let mut r_one_r_counts = HashMap::new();
 
@@ -389,21 +397,18 @@ fn extract_pileup_counts(pileup: &Pileup, min_bq: usize, min_mapq: usize, end_of
             }
 
             let base_call = BaseCall::new(&alignment, ref_seq, ref_pos);
-            //if !base_call.deleted_bases.is_empty() || !base_call.insertion_bases.is_empty() {
-            //    println!("{}", base_call);
-            //}
+        
             
-           
             if record.is_reverse() && record.is_first_in_template() {
-                r_one_r_counts.insert(base, r_one_r_counts.get(&base).unwrap_or(&0) + 1);
+                r_one_r_counts.insert(base_call.clone(), r_one_r_counts.get(&base_call).unwrap_or(&0) + 1);
             } else if !record.is_reverse() && record.is_first_in_template() {
-                r_one_f_counts.insert(base, r_one_f_counts.get(&base).unwrap_or(&0) + 1);
+                r_one_f_counts.insert(base_call.clone(), r_one_f_counts.get(&base_call).unwrap_or(&0) + 1);
             } else if record.is_reverse() && !record.is_first_in_template() {
-                r_one_f_counts.insert(base, r_one_f_counts.get(&base).unwrap_or(&0) + 1);
+                r_one_f_counts.insert(base_call.clone(), r_one_f_counts.get(&base_call).unwrap_or(&0) + 1);
             } else if !record.is_reverse() && !record.is_first_in_template() {
-                r_one_r_counts.insert(base, r_one_r_counts.get(&base).unwrap_or(&0) + 1);
+                r_one_r_counts.insert(base_call.clone(), r_one_r_counts.get(&base_call).unwrap_or(&0) + 1);
             }
-            total_counts.insert(base, total_counts.get(&base).unwrap_or(&0) + 1);
+            total_counts.insert(base_call.clone(), total_counts.get(&base_call).unwrap_or(&0) + 1);
         }
     }
 
@@ -531,7 +536,7 @@ fn call_variants(chunk: &GenomeChunk, bam_path: &str, ref_seq: &Vec<u8>,  min_bq
         
         let (r_one_f_counts, r_one_r_counts, total_counts) = extract_pileup_counts(&pileup, min_bq, min_mapq, end_of_read_cutoff, max_mismatches, ref_seq, pos);
         
-        let mut all_found_alts: HashSet<char> = HashSet::new();
+        let mut all_found_alts: HashSet<&BaseCall> = HashSet::new();
         all_found_alts.extend(r_one_f_counts.keys());
         all_found_alts.extend(r_one_r_counts.keys());
 
@@ -551,7 +556,7 @@ fn call_variants(chunk: &GenomeChunk, bam_path: &str, ref_seq: &Vec<u8>,  min_bq
         let r_one_f_candidates = get_count_vec_candidates(&r_one_f_counts, ref_base as char);
         let r_one_r_candidates = get_count_vec_candidates(&r_one_r_counts, ref_base as char);
         
-        let (candidates, counts): (HashSet<char>, HashMap<char, usize>) =
+        let (candidates, counts): (HashSet<BaseCall>, HashMap<BaseCall, usize>) =
     match find_where_to_call_variants(
         ref_base as char,
         &r_one_f_candidates,
@@ -597,8 +602,8 @@ fn call_variants(chunk: &GenomeChunk, bam_path: &str, ref_seq: &Vec<u8>,  min_bq
                 let variant = Variant::new(
                     ref_name.to_string(),
                     pos + 1, // Convert to 1-based position
-                    String::from_utf8_lossy(&[ref_base]).to_string(),
-                    candidate.to_string(),
+                    candidate.get_reference_allele(),
+                    candidate.get_alternate_allele(),
                     genotype.to_string(),
                     total_depth as u32,
                     *alt_counts as u32,
