@@ -11,8 +11,7 @@ use std::io::Write;
 use rust_htslib::bam::pileup::Indel;
 use rayon::prelude::*;
 use std::fs::File;
-use semaphore_sync::Semaphore;
-use std::sync::Arc;
+
 
 #[derive(Parser, Debug)]
 #[command(name = "tvc", about = "A Taps Variant Caller")]
@@ -341,26 +340,17 @@ fn workflow(
     let chunks: Vec<GenomeChunk> = get_genome_chunks(ref_path, chunk_size);
 
 
-    
 
     // Rayon thread pool
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
         .build()?;
 
-
-let max_open_files = num_threads * 2;
-let semaphore = Arc::new(Semaphore::new(max_open_files));
-
-let all_variants: Vec<Variant> = pool.install(|| {
+    let all_variants: Vec<Variant> = pool.install(|| {
     chunks
         .par_iter()
         .map(|chunk| {
-            // Acquire a permit (blocking)
-            let permit = semaphore.access();
-
-            // Call variants for this chunk
-            let variants = call_variants(
+            call_variants(
                 chunk,
                 bam_path,
                 seq_name_to_seq.get(&chunk.contig)
@@ -372,15 +362,14 @@ let all_variants: Vec<Variant> = pool.install(|| {
                 max_mismatches,
                 min_ao,
             )
-            .unwrap_or_else(|_| Vec::new());
-
-            drop(permit); // release semaphore
-
-            variants
+            .unwrap_or_else(|e| {
+                Vec::new()
+            })
         })
         .flatten()
         .collect()
 });
+
     println!("Found {} variants", all_variants.len());
 
 
