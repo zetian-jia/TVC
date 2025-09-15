@@ -389,9 +389,9 @@ fn extract_pileup_counts(pileup: &Pileup, min_bq: usize, min_mapq: usize, end_of
             }
 
             let base_call = BaseCall::new(&alignment, ref_seq, ref_pos);
-            if !base_call.deleted_bases.is_empty() || !base_call.insertion_bases.is_empty() {
-                println!("{}", base_call);
-            }
+            //if !base_call.deleted_bases.is_empty() || !base_call.insertion_bases.is_empty() {
+            //    println!("{}", base_call);
+            //}
             
            
             if record.is_reverse() && record.is_first_in_template() {
