@@ -32,14 +32,17 @@ struct Args {
     #[arg(short = 'b', long, default_value_t = 20)]
     min_bq: usize,
 
-    #[arg(short = 'm', long, default_value_t = 20)]
+    #[arg(short = 'm', long, default_value_t = 1)]
     min_mapq: usize,
 
-    #[arg(short = 'd', long, default_value_t = 10)]
+    #[arg(short = 'd', long, default_value_t = 2)]
     min_depth: u32,
 
-    #[arg(short = 'e', long, default_value_t = 20)]
+    #[arg(short = 'e', long, default_value_t = 5)]
     end_of_read_cutoff: usize,
+
+    #[arg(short = 'i', long, default_value_t = 20)]
+    indel_end_of_read_cutoff: usize,
 
     #[arg(short = 'x', long, default_value_t = 10)]
     max_mismatches: u32,
@@ -353,7 +356,7 @@ fn get_nm_tag(record: &bam::Record) -> u32 {
 
 
 
-fn extract_pileup_counts(pileup: &Pileup, min_bq: usize, min_mapq: usize, end_of_read_cutoff: usize, max_mismatches: u32, ref_seq: &Vec<u8>, ref_pos: u32) -> (HashMap<BaseCall, usize>, HashMap<BaseCall, usize>, HashMap<BaseCall, usize>) {
+fn extract_pileup_counts(pileup: &Pileup, min_bq: usize, min_mapq: usize, end_of_read_cutoff: usize, indel_end_of_read_cutoff: usize, max_mismatches: u32, ref_seq: &Vec<u8>, ref_pos: u32) -> (HashMap<BaseCall, usize>, HashMap<BaseCall, usize>, HashMap<BaseCall, usize>) {
     let mut r_one_f_counts = HashMap::new();
     let mut r_one_r_counts = HashMap::new();
 
@@ -376,13 +379,7 @@ fn extract_pileup_counts(pileup: &Pileup, min_bq: usize, min_mapq: usize, end_of
             let is_del = alignment.is_del();
             let is_refskip = alignment.is_refskip();
 
-            if qpos < end_of_read_cutoff{
-                continue;
-            }
-
-            if record.seq().len() - end_of_read_cutoff < qpos {
-                continue;
-            }
+            
 
             if is_del || is_refskip {
                 continue;
@@ -403,6 +400,18 @@ fn extract_pileup_counts(pileup: &Pileup, min_bq: usize, min_mapq: usize, end_of
             }
 
             let base_call = BaseCall::new(&alignment, ref_seq, ref_pos);
+
+            let read_len = record.seq().len();
+            if base_call.is_snp() {
+                
+                if qpos < end_of_read_cutoff || qpos >= read_len - end_of_read_cutoff {
+                    continue;
+                }
+            } else {
+                if qpos < indel_end_of_read_cutoff || qpos >= read_len - indel_end_of_read_cutoff {
+                    continue;
+                }
+            }
         
             
             if record.is_reverse() && record.is_first_in_template() {
@@ -429,6 +438,7 @@ fn workflow(
     min_mapq: usize,
     min_depth: u32,
     end_of_read_cutoff: usize,
+    indel_end_of_read_cutoff: usize,
     max_mismatches: u32,
     min_ao: u32,
     num_threads: usize,
@@ -482,6 +492,7 @@ fn workflow(
                 min_mapq,
                 min_depth,
                 end_of_read_cutoff,
+                indel_end_of_read_cutoff,
                 max_mismatches,
                 min_ao,
             )
@@ -522,7 +533,7 @@ fn workflow(
 }
 
 
-fn call_variants(chunk: &GenomeChunk, bam_path: &str, ref_seq: &Vec<u8>,  min_bq: usize, min_mapq: usize, min_depth: u32, end_of_read_cutoff: usize, max_mismatches: u32, min_ao: u32) -> Result<Vec<Variant>, Box<dyn std::error::Error>> {
+fn call_variants(chunk: &GenomeChunk, bam_path: &str, ref_seq: &Vec<u8>,  min_bq: usize, min_mapq: usize, min_depth: u32, end_of_read_cutoff: usize, indel_end_of_read_cutoff: usize, max_mismatches: u32, min_ao: u32) -> Result<Vec<Variant>, Box<dyn std::error::Error>> {
     // Placeholder for the workflow function
     // This is where the main logic of your variant caller would go
     
@@ -558,7 +569,7 @@ fn call_variants(chunk: &GenomeChunk, bam_path: &str, ref_seq: &Vec<u8>,  min_bq
             continue;
         }
         
-        let (r_one_f_counts, r_one_r_counts, total_counts) = extract_pileup_counts(&pileup, min_bq, min_mapq, end_of_read_cutoff, max_mismatches, ref_seq, pos);
+        let (r_one_f_counts, r_one_r_counts, total_counts) = extract_pileup_counts(&pileup, min_bq, min_mapq, end_of_read_cutoff, indel_end_of_read_cutoff, max_mismatches, ref_seq, pos);
         
         let mut all_found_alts: HashSet<&BaseCall> = HashSet::new();
         all_found_alts.extend(r_one_f_counts.keys());
@@ -651,12 +662,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
     let min_depth = args.min_depth;
     let ref_path = &args.input_ref;
     let end_of_read_cutoff = args.end_of_read_cutoff;
+    let indel_end_of_read_cutoff = args.indel_end_of_read_cutoff;
     let max_mismatches = args.max_mismatches;
     let min_ao = args.min_ao;
     let num_threads = args.num_threads;
     let chunk_size = args.chunk_size;
 
-    workflow(bam_path, ref_path, vcf_path, min_bq, min_mapq, min_depth, end_of_read_cutoff, max_mismatches, min_ao, num_threads, chunk_size)?;
+    workflow(bam_path, ref_path, vcf_path, min_bq, min_mapq, min_depth, end_of_read_cutoff, indel_end_of_read_cutoff, max_mismatches, min_ao, num_threads, chunk_size)?;
     
     Ok(())
 }
