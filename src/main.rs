@@ -334,18 +334,6 @@ fn get_nm_tag(record: &bam::Record) -> u32 {
     }
 }
 
-fn get_deleted_bases(aln: &Alignment, ref_seq: &[u8], ref_pos: u32) -> Option<String> {
-    match aln.indel() {
-        Indel::Del(len) => {
-            // Safely slice the reference sequence
-            let index_start = ref_pos as usize;
-            let del_seq = ref_seq.get(index_start + 1..index_start + len as usize + 1)?;
-            println!("Deleted bases: {}", String::from_utf8_lossy(del_seq).to_string());
-            Some(String::from_utf8_lossy(del_seq).to_string())
-        }
-        _ => None,
-    }
-}
 
 
 
@@ -401,7 +389,10 @@ fn extract_pileup_counts(pileup: &Pileup, min_bq: usize, min_mapq: usize, end_of
             }
 
             let base_call = BaseCall::new(&alignment, ref_seq, ref_pos);
-            println!("{}", base_call);
+            if !base_call.deleted_bases.is_empty() || !base_call.insertion_bases.is_empty() {
+                println!("{}", base_call);
+            }
+            
            
             if record.is_reverse() && record.is_first_in_template() {
                 r_one_r_counts.insert(base, r_one_r_counts.get(&base).unwrap_or(&0) + 1);
