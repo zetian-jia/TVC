@@ -12,7 +12,7 @@ use rust_htslib::bam::pileup::Indel;
 use rayon::prelude::*;
 use std::fs::File;
 use std::sync::Arc;
-use tokio::sync::Semaphore;
+use async_lock::Semaphore;
 
 #[derive(Parser, Debug)]
 #[command(name = "tvc", about = "A Taps Variant Caller")]
@@ -341,20 +341,24 @@ fn workflow(
     let chunks: Vec<GenomeChunk> = get_genome_chunks(ref_path, chunk_size);
 
 
-    let max_open_files = num_threads * 2 + 10;
-    let semaphore = Arc::new(Semaphore::new(max_open_files));
+    
 
     // Rayon thread pool
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
         .build()?;
 
-    let all_variants: Vec<Variant> = pool.install(|| {
+
+// Create the semaphore before the pool
+let max_open_files = num_threads * 2; // adjust as needed
+let semaphore = Arc::new(Semaphore::new(max_open_files));
+
+let all_variants: Vec<Variant> = pool.install(|| {
     chunks
         .par_iter()
         .map(|chunk| {
-            // Acquire a permit before opening a BAM
-            let permit = semaphore.clone().acquire_owned().unwrap();
+            // Acquire a permit before opening a BAM (blocking)
+            let permit = semaphore.clone().lock(); // blocks if max_open_files reached
 
             // Call variants for this chunk
             let variants = call_variants(
