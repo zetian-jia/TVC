@@ -12,7 +12,8 @@ use std::io::Write;
 use rust_htslib::bam::pileup::Indel;
 use rayon::prelude::*;
 use std::fs::File;
-
+use std::fmt;
+use std::hash::{Hash, Hasher};
 
 #[derive(Parser, Debug)]
 #[command(name = "tvc", about = "A Taps Variant Caller")]
@@ -111,6 +112,93 @@ impl Variant {
         )
     }
 }
+
+struct BaseCall {
+    base: char,
+    deleted_bases: Vec<u8>,
+    insertion_bases: Vec<u8>,
+}
+
+impl BaseCall {
+    fn new(alignment: &Alignment, ref_seq: &Vec<u8>, ref_pos: u32) -> Self {
+        let qpos = alignment.qpos().unwrap();
+        let base = alignment.record().seq().as_bytes()[qpos] as char;
+
+        let mut deleted_bases = Vec::new();
+        let mut insertion_bases = Vec::new();
+
+        match alignment.indel() {
+            Indel::Del(len) => {
+                let start = ref_pos as usize;
+                let end = start + len as usize;
+                deleted_bases = ref_seq.get(start..end).unwrap_or(&[]).to_vec();
+            }
+            Indel::Ins(len) => {
+                let read_seq = alignment.record().seq().as_bytes();
+                let start = qpos + 1;
+                let end = start + len as usize;
+                insertion_bases = read_seq.get(start..end).unwrap_or(&[]).to_vec();
+            }
+            Indel::None => {}
+        }
+
+        BaseCall {
+            base,
+            deleted_bases,
+            insertion_bases,
+        }
+    }
+
+    fn get_reference_allele(&self) -> String {
+        let mut ref_allele = String::new();
+        ref_allele.push(self.base);
+        if !self.deleted_bases.is_empty() {
+            ref_allele.push_str(&String::from_utf8_lossy(&self.deleted_bases));
+        }
+        ref_allele
+    }
+
+    fn get_alternate_allele(&self) -> String {
+        let mut alt_allele = String::new();
+        alt_allele.push(self.base);
+        if !self.insertion_bases.is_empty() {
+            alt_allele.push_str(&String::from_utf8_lossy(&self.insertion_bases));
+        }
+        alt_allele
+    }
+
+}
+
+impl fmt::Display for BaseCall {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Base: {}\tDeleted: {}\tInserted: {}",
+            self.base,
+            String::from_utf8_lossy(&self.deleted_bases),
+            String::from_utf8_lossy(&self.insertion_bases)
+        )
+    }
+}
+
+impl PartialEq for BaseCall {
+    fn eq(&self, other: &Self) -> bool {
+        self.base == other.base
+            && self.deleted_bases == other.deleted_bases
+            && self.insertion_bases == other.insertion_bases
+    }
+}
+
+impl Eq for BaseCall {}
+
+impl Hash for BaseCall {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.base.hash(state);
+        self.deleted_bases.hash(state);
+        self.insertion_bases.hash(state);
+    }
+}
+
 
 struct GenomeChunk {
     contig: String,
@@ -312,7 +400,8 @@ fn extract_pileup_counts(pileup: &Pileup, min_bq: usize, min_mapq: usize, end_of
                 continue;
             }
 
-            get_deleted_bases(&alignment, ref_seq, ref_pos);
+            let base_call = BaseCall::new(&alignment, ref_seq, ref_pos);
+            println!("{}", base_call);
            
             if record.is_reverse() && record.is_first_in_template() {
                 r_one_r_counts.insert(base, r_one_r_counts.get(&base).unwrap_or(&0) + 1);
