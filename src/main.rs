@@ -125,6 +125,7 @@ impl Variant {
 #[derive(Clone)]
 struct BaseCall {
     base: char,
+    ref_base: char,
     deleted_bases: Vec<u8>,
     insertion_bases: Vec<u8>,
 }
@@ -133,6 +134,7 @@ impl BaseCall {
     fn new(alignment: &Alignment, ref_seq: &Vec<u8>, ref_pos: u32) -> Self {
         let qpos = alignment.qpos().unwrap();
         let base = alignment.record().seq().as_bytes()[qpos] as char;
+        let ref_base = ref_seq[ref_pos as usize] as char;
 
         let mut deleted_bases = Vec::new();
         let mut insertion_bases = Vec::new();
@@ -154,6 +156,7 @@ impl BaseCall {
 
         BaseCall {
             base,
+            ref_base,
             deleted_bases,
             insertion_bases,
         }
@@ -161,7 +164,7 @@ impl BaseCall {
 
     fn get_reference_allele(&self) -> String {
         let mut ref_allele = String::new();
-        ref_allele.push(self.base);
+        ref_allele.push(self.ref_base);
         if !self.deleted_bases.is_empty() {
             ref_allele.push_str(&String::from_utf8_lossy(&self.deleted_bases));
         }
