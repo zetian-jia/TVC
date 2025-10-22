@@ -69,6 +69,7 @@ struct Variant {
     score: f64,
     depth: u32,
     alt_counts: u32,
+    calling_directive: CALLING_DIRECTIVE,
 }
 
 impl Variant {
@@ -81,6 +82,7 @@ impl Variant {
         score: f64,
         depth: u32,
         alt_counts: u32,
+        calling_directive: CALLING_DIRECTIVE,
 
     ) -> Self {
         Variant {
@@ -92,6 +94,7 @@ impl Variant {
             score,
             depth,
             alt_counts,
+            calling_directive,
         }
     }
 
@@ -115,13 +118,20 @@ impl Variant {
         let variant_type = self.infer_variant_type();
 
         format!(
-            "{}\t{}\t.\t{}\t{}\t{}\t.\tVT={}\tGT:DP:AO\t{}:{}:{}\n",
+            "{}\t{}\t.\t{}\t{}\t{}\t.\tVT={};CD={}\tGT:DP:AO\t{}:{}:{}\n",
             self.contig,
             self.pos,
             self.reference,
             self.alt,
-            self.score,
+            self.score.round(),
             variant_type,
+            match self.calling_directive {
+                CALLING_DIRECTIVE::REFERENCE_SITE_OB => "REF_OB",
+                CALLING_DIRECTIVE::DENOVO_SITE_OB => "DENOVO_OB",
+                CALLING_DIRECTIVE::REFERENCE_SITE_OT => "REF_OT",
+                CALLING_DIRECTIVE::DENOVO_SITE_OT => "DENOVO_OT",
+                CALLING_DIRECTIVE::BOTH_STRANDS => "BOTH",
+            },
             self.genotype,
             self.depth,
             self.alt_counts,
@@ -143,6 +153,7 @@ impl Genotype{
     }
 }
 
+#[derive(Clone)]
 enum CALLING_DIRECTIVE {
     REFERENCE_SITE_OB,
     DENOVO_SITE_OB,
@@ -322,6 +333,7 @@ fn get_vcf_header(header: &bam::HeaderView) -> String {
         "##fileformat=VCFv4.2\n\
         {}
 ##INFO=<ID=VT,Number=1,Type=String,Description=\"Variant Type\">\n\
+        ##INFO=<ID=CD,Number=0,Type=String,Description=\"TVC Call Directive\">\n\
         ##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n\
         ##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Read Depth\">\n\
         ##FORMAT=<ID=RO,Number=1,Type=Integer,Description=\"Reference Allele Count\">\n\
@@ -635,30 +647,31 @@ fn call_variants(chunk: &GenomeChunk, bam_path: &str, ref_seq: &Vec<u8>,  min_bq
         let r_one_f_candidates = get_count_vec_candidates(&r_one_f_counts, ref_base as char, error_rate);
         let r_one_r_candidates = get_count_vec_candidates(&r_one_r_counts, ref_base as char, error_rate);
         
-        let (candidates, counts): (HashSet<BaseCall>, HashMap<BaseCall, usize>) =
-    match find_where_to_call_variants(
-        ref_base as char,
-        &r_one_f_candidates,
-        upstream_base as char,
-        downstream_base as char,
-    ) {
-        CALLING_DIRECTIVE::REFERENCE_SITE_OB | CALLING_DIRECTIVE::DENOVO_SITE_OB => (
-        
-            r_one_r_candidates.clone(),
-            r_one_r_counts.clone(),
-        ),
-        CALLING_DIRECTIVE::REFERENCE_SITE_OT | CALLING_DIRECTIVE::DENOVO_SITE_OT => (
-            r_one_f_candidates.clone(),
-            r_one_f_counts.clone(),
-        ),
-        CALLING_DIRECTIVE::BOTH_STRANDS => (
-            r_one_f_candidates
-                .intersection(&r_one_r_candidates)
-                .cloned()
-                .collect(),
-            total_counts.clone(),
-        )
-    };
+        let directive = find_where_to_call_variants(
+    ref_base as char,
+    &r_one_f_candidates,
+    upstream_base as char,
+    downstream_base as char,
+);
+
+let (candidates, counts): (HashSet<BaseCall>, HashMap<BaseCall, usize>) = match directive {
+    CALLING_DIRECTIVE::REFERENCE_SITE_OB | CALLING_DIRECTIVE::DENOVO_SITE_OB => (
+        r_one_r_candidates.clone(),
+        r_one_r_counts.clone(),
+    ),
+    CALLING_DIRECTIVE::REFERENCE_SITE_OT | CALLING_DIRECTIVE::DENOVO_SITE_OT => (
+        r_one_f_candidates.clone(),
+        r_one_f_counts.clone(),
+    ),
+    CALLING_DIRECTIVE::BOTH_STRANDS => (
+        r_one_f_candidates
+            .intersection(&r_one_r_candidates)
+            .cloned()
+            .collect(),
+        total_counts.clone(),
+    ),
+};
+
 
         let total_depth = counts.values().sum::<usize>() as u64;
         if total_depth < min_depth as u64 {
@@ -687,6 +700,8 @@ fn call_variants(chunk: &GenomeChunk, bam_path: &str, ref_seq: &Vec<u8>,  min_bq
                     genotype.score,
                     total_depth as u32,
                     *alt_counts as u32,
+                    directive.clone(),
+
                 );
                 variants.push(variant);
             }
