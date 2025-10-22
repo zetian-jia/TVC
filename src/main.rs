@@ -117,7 +117,7 @@ impl Variant {
         let variant_type = self.infer_variant_type();
 
         format!(
-            "{}\t{}\t.\t{}\t{}\t{}\tPASS\tVT={};CD={}\tGT:DP:AO\t{}:{}:{}\n",
+            "{}\t{}\t.\t{}\t{}\t{}\t.\tVT={};CD={}\tGT:DP:AO\t{}:{}:{}\n",
             self.contig,
             self.pos,
             self.reference,
