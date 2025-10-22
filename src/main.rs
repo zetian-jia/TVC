@@ -1,10 +1,9 @@
 use clap::Parser;
 
-use rust_htslib::bam::{self, Read, FetchDefinition};
+use rust_htslib::bam::{self, Read};
 use rust_htslib::bam::pileup::Pileup;
 use rust_htslib::bam::pileup::Alignment;
 use rust_htslib::faidx;
-use std::error::Error;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use statrs::distribution::{Binomial, DiscreteCDF, Discrete};
@@ -69,7 +68,7 @@ struct Variant {
     score: f64,
     depth: u32,
     alt_counts: u32,
-    calling_directive: CALLING_DIRECTIVE,
+    calling_directive: CallingDirective,
 }
 
 impl Variant {
@@ -82,7 +81,7 @@ impl Variant {
         score: f64,
         depth: u32,
         alt_counts: u32,
-        calling_directive: CALLING_DIRECTIVE,
+        calling_directive: CallingDirective,
 
     ) -> Self {
         Variant {
@@ -126,11 +125,11 @@ impl Variant {
             self.score.round(),
             variant_type,
             match self.calling_directive {
-                CALLING_DIRECTIVE::REFERENCE_SITE_OB => "REF_OB",
-                CALLING_DIRECTIVE::DENOVO_SITE_OB => "DENOVO_OB",
-                CALLING_DIRECTIVE::REFERENCE_SITE_OT => "REF_OT",
-                CALLING_DIRECTIVE::DENOVO_SITE_OT => "DENOVO_OT",
-                CALLING_DIRECTIVE::BOTH_STRANDS => "BOTH",
+                CallingDirective::ReferenceSiteOb => "REF_OB",
+                CallingDirective::DenovoSiteOb => "DENOVO_OB",
+                CallingDirective::ReferenceSiteOt => "REF_OT",
+                CallingDirective::DenovoSiteOt => "DENOVO_OT",
+                CallingDirective::BothStrands => "BOTH",
             },
             self.genotype,
             self.depth,
@@ -166,12 +165,12 @@ impl Genotype{
 }
 
 #[derive(Clone)]
-enum CALLING_DIRECTIVE {
-    REFERENCE_SITE_OB,
-    DENOVO_SITE_OB,
-    REFERENCE_SITE_OT,
-    DENOVO_SITE_OT,
-    BOTH_STRANDS,
+enum CallingDirective {
+    ReferenceSiteOb,
+    DenovoSiteOb,
+    ReferenceSiteOt,
+    DenovoSiteOt,
+    BothStrands,
 }
 
 
@@ -306,24 +305,24 @@ fn get_genome_chunks(
 
 
 
-fn find_where_to_call_variants(ref_base: char, alt_candidates: &HashSet<BaseCall>, upstream_base: char, downstream_base: char) -> CALLING_DIRECTIVE {
+fn find_where_to_call_variants(ref_base: char, alt_candidates: &HashSet<BaseCall>, upstream_base: char, downstream_base: char) -> CallingDirective {
     
     let alt_candidate_bases: HashSet<char> = alt_candidates.iter().map(|bc| bc.base).collect();
     
     if ref_base == 'C' && downstream_base == 'G'{
-        return  CALLING_DIRECTIVE::REFERENCE_SITE_OB;
+        return  CallingDirective::ReferenceSiteOb;
     }
     else if alt_candidate_bases.contains(&'C') && downstream_base == 'G'{
-        return  CALLING_DIRECTIVE::DENOVO_SITE_OB;
+        return  CallingDirective::DenovoSiteOb;
     }
     else if ref_base == 'G' && upstream_base == 'C'{
-        return  CALLING_DIRECTIVE::REFERENCE_SITE_OT;
+        return  CallingDirective::ReferenceSiteOt;
     }
     else if alt_candidate_bases.contains(&'G') && upstream_base == 'C'{
-        return  CALLING_DIRECTIVE::DENOVO_SITE_OT;
+        return  CallingDirective::DenovoSiteOt;
     }
     else {
-        return CALLING_DIRECTIVE::BOTH_STRANDS;
+        return CallingDirective::BothStrands;
     }
 }
 
@@ -558,7 +557,7 @@ fn workflow(
                 min_ao,
                 error_rate
             )
-            .unwrap_or_else(|e| {
+            .unwrap_or_else(|_e| {
                 Vec::new()
             });
             open_files_counter.fetch_sub(1, Ordering::SeqCst);
@@ -613,8 +612,6 @@ fn call_variants(chunk: &GenomeChunk, bam_path: &str, ref_seq: &Vec<u8>,  min_bq
 
     let mut variants = Vec::new();
     
-
-    let mut position_counter = 0;
     for result in bam.pileup() {
         let pileup: Pileup = result.expect("Failed to read pileup");
         let tid = pileup.tid();
@@ -661,15 +658,15 @@ fn call_variants(chunk: &GenomeChunk, bam_path: &str, ref_seq: &Vec<u8>,  min_bq
 );
 
 let (candidates, counts): (HashSet<BaseCall>, HashMap<BaseCall, usize>) = match directive {
-    CALLING_DIRECTIVE::REFERENCE_SITE_OB | CALLING_DIRECTIVE::DENOVO_SITE_OB => (
+    CallingDirective::ReferenceSiteOb | CallingDirective::DenovoSiteOb => (
         r_one_r_candidates.clone(),
         r_one_r_counts.clone(),
     ),
-    CALLING_DIRECTIVE::REFERENCE_SITE_OT | CALLING_DIRECTIVE::DENOVO_SITE_OT => (
+    CallingDirective::ReferenceSiteOt | CallingDirective::DenovoSiteOt => (
         r_one_f_candidates.clone(),
         r_one_f_counts.clone(),
     ),
-    CALLING_DIRECTIVE::BOTH_STRANDS => (
+    CallingDirective::BothStrands => (
         r_one_f_candidates
             .intersection(&r_one_r_candidates)
             .cloned()
@@ -791,16 +788,54 @@ mod tests {
     }
 
     // Now define tests
-    make_variant_test!(test_both_strands_chr11_8198900_A_C_homo, "both_strands_chr11_8198900_A_C_homo.bam", 8198900, "A", "C", "1/1");
-    make_variant_test!(test_both_strands_chr11_8198951_T_A_het, "both_strands_chr11_8198951_T_A_het.bam", 8198951, "T", "A", "0/1");
-    make_variant_test!(test_denovo_ob_chr11_134755809_T_C_homo, "denovo_ob_chr11_134755809_T_C_homo.bam", 134755809, "T", "C", "1/1");
-    make_variant_test!(test_denovo_ob_chr11_134911365_T_C_het, "denovo_ob_chr11_134911365_T_C_het.bam", 134911365, "T", "C", "0/1");
-    make_variant_test!(test_denovo_ot_chr11_134012307_C_A_het, "denovo_ot_chr11_134012307_C_A_het.bam", 134012307, "C", "A", "0/1");
-    make_variant_test!(test_denovo_ot_chr11_134479860_A_G_homo, "denovo_ot_chr11_134479860_A_G_homo.bam", 134479860, "A", "G", "1/1");
-    make_variant_test!(test_ref_ob_chr11_134012307_C_A_het, "ref_ob_chr11_134012307_C_A_het.bam", 134012307, "C", "A", "0/1");
-    make_variant_test!(test_ref_ob_chr11_134610622_C_T_homo, "ref_ob_chr11_134610622_C_T_homo.bam", 134610622, "C", "T", "1/1");
-    make_variant_test!(test_ref_ot_chr11_134473154_G_A_homo, "ref_ot_chr11_134473154_G_A_homo.bam", 134473154, "G", "A", "1/1");
-    make_variant_test!(test_ref_ot_chr11_8195526_G_A_het, "ref_ot_chr11_8195526_G_A_het.bam", 8195526, "G", "A", "0/1");
-    // skip methylation_site.bam unless you have a variant to check
+    make_variant_test!(test_both_strands_chr11_8198900_a_c_homo, "both_strands_chr11_8198900_A_C_homo.bam", 8198900, "A", "C", "1/1");
+    make_variant_test!(test_both_strands_chr11_8198951_t_a_het, "both_strands_chr11_8198951_T_A_het.bam", 8198951, "T", "A", "0/1");
+    make_variant_test!(test_denovo_ob_chr11_134755809_t_c_homo, "denovo_ob_chr11_134755809_T_C_homo.bam", 134755809, "T", "C", "1/1");
+    make_variant_test!(test_denovo_ob_chr11_134911365_t_c_het, "denovo_ob_chr11_134911365_T_C_het.bam", 134911365, "T", "C", "0/1");
+    make_variant_test!(test_denovo_ot_chr11_134749303_a_g_het, "denovo_ot_chr11_134749303_A_G_het.bam", 134749303, "A", "G", "0/1");
+    make_variant_test!(test_denovo_ot_chr11_134479860_a_g_homo, "denovo_ot_chr11_134479860_A_G_homo.bam", 134479860, "A", "G", "1/1");
+    make_variant_test!(test_ref_ob_chr11_134012307_c_a_het, "ref_ob_chr11_134012307_C_A_het.bam", 134012307, "C", "A", "0/1");
+    make_variant_test!(test_ref_ob_chr11_134610622_c_t_homo, "ref_ob_chr11_134610622_C_T_homo.bam", 134610622, "C", "T", "1/1");
+    make_variant_test!(test_ref_ot_chr11_134473154_g_a_homo, "ref_ot_chr11_134473154_G_A_homo.bam", 134473154, "G", "A", "1/1");
+    make_variant_test!(test_ref_ot_chr11_8195526_g_a_het, "ref_ot_chr11_8195526_G_A_het.bam", 8195526, "G", "A", "0/1");
+
+    #[test]
+fn test_methylation_site_no_variants() {
+    let test_ref = "test_assets/chr11.fasta";
+    let test_bam = "test_assets/testing_bams/methylation_site_chr11_134755601_134755621.bam";
+
+    // Load reference
+    let ref_reader = faidx::Reader::from_path(test_ref).expect("Failed to open FASTA");
+    let contig = "chr11";
+    let seq_len = ref_reader.fetch_seq_len(contig);
+    let ref_seq: Vec<u8> = ref_reader.fetch_seq(contig, 0, seq_len as usize)
+        .expect("Failed to fetch seq")
+        .into_iter()
+        .map(|b| b.to_ascii_uppercase())
+        .collect();
+
+    // Define chunk covering the whole methylation region
+    let chunk = GenomeChunk::new(contig.to_string(), 134755601, 134755621);
+
+    let variants = call_variants(
+        &chunk,
+        test_bam,
+        &ref_seq,
+        20,  // min_bq
+        1,   // min_mapq
+        1,   // min_depth
+        5,   // end_of_read_cutoff
+        20,  // indel_end_of_read_cutoff
+        10,  // max_mismatches
+        1,   // min_ao
+        0.005 // error_rate
+    ).expect("call_variants failed");
+
+    let filtered_variants: Vec<&Variant> = variants.iter()
+        .filter(|v| v.pos >= 134755601 && v.pos <= 134755621)
+        .collect();
+
+    assert!(filtered_variants.is_empty(), "Expected no variants in methylation site BAM");
+}
 }
 
