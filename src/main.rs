@@ -59,6 +59,17 @@ struct Args {
 }
 
 /// Representation of a genomic variant
+///
+/// # Fields
+/// * `contig` - Chromosome or contig name
+/// * `pos` - 1-based position of the variant
+/// * `reference` - Reference allele
+/// * `alt` - Alternate allele
+/// * `genotype` - Genotype string (e.g., "0/1")
+/// * `score` - Phred-scaled quality score
+/// * `depth` - Read depth at the variant position
+/// * `alt_counts` - Count of reads supporting the alternate allele
+/// * `calling_directive` - Calling directive for the variant caller
 struct Variant {
     contig: String,
     pos: u32,
@@ -162,6 +173,10 @@ impl Variant {
 
 
 /// Representation of a genotype with associated quality score
+///
+/// # Fields
+/// * `genotype` - Genotype string (e.g., "0/1")
+/// * `score` - Phred-scaled quality score
 struct Genotype{
     genotype: String,
     score: f64 
@@ -196,8 +211,14 @@ impl Genotype{
 }
 
 #[derive(Clone)]
+/// Calling directives for the Taps Variant Caller
+///# Variants
+/// * `ReferenceSiteOb` - Call at reference site on original bottom strand
+/// * `DenovoSiteOb` - Call at de novo site on original bottom strand
+/// * `ReferenceSiteOt` - Call at reference site on original top strand
+/// * `DenovoSiteOt` - Call at de novo site on original top strand
+/// * `BothStrands` - Call on both strands
 enum CallingDirective {
-    /// Calling directive for Taps Variant Caller
     ReferenceSiteOb,
     DenovoSiteOb,
     ReferenceSiteOt,
@@ -209,8 +230,14 @@ enum CallingDirective {
 
 
 #[derive(Clone)]
+/// Representation of a base call from a read alignment
+///
+/// # Fields
+/// * `base` - The base called from the read
+/// * `ref_base` - The reference base at the position
+/// * `deleted_bases` - Bases deleted in the read
+/// * `insertion_bases` - Bases inserted in the read
 struct BaseCall {
-    /// The base called from A read
     base: char,
     ref_base: char,
     deleted_bases: Vec<u8>,
@@ -258,11 +285,12 @@ impl BaseCall {
         }
     }
 
+    /// Get the reference allele string
+    ///
+    /// # Returns
+    /// A string representing the reference allele
     fn get_reference_allele(&self) -> String {
-        /// Get the reference allele string
-        ///
-        /// # Returns
-        /// A string representing the reference allele
+        
         let mut ref_allele = String::new();
         ref_allele.push(self.ref_base);
         if !self.deleted_bases.is_empty() {
@@ -271,11 +299,12 @@ impl BaseCall {
         ref_allele
     }
 
+    /// Get the alternate allele string
+    ///
+    /// # Returns
+    /// A string representing the alternate allele
     fn get_alternate_allele(&self) -> String {
-        /// Get the alternate allele string
-        ///
-        /// # Returns
-        /// A string representing the alternate allele
+        
         let mut alt_allele = String::new();
         alt_allele.push(self.base);
         if !self.insertion_bases.is_empty() {
@@ -284,6 +313,9 @@ impl BaseCall {
         alt_allele
     }
 
+    /// Check if the BaseCall represents a SNP
+    /// # Returns
+    /// True if SNP, false otherwise
     fn is_snp(&self) -> bool {
         self.deleted_bases.is_empty() && self.insertion_bases.is_empty()
     }
@@ -291,11 +323,12 @@ impl BaseCall {
 }
 
 impl fmt::Display for BaseCall {
+    /// Format the BaseCall for display
+    ///
+    /// # Returns
+    /// A formatted string representation of the BaseCall
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        /// Format the BaseCall for display
-        ///
-        /// # Returns
-        /// A formatted string representation of the BaseCall
+        
         write!(
             f,
             "Base: {}\tDeleted: {}\tInserted: {}",
@@ -307,6 +340,10 @@ impl fmt::Display for BaseCall {
 }
 
 impl PartialEq for BaseCall {
+    /// Compare two BaseCall instances for equality
+    ///
+    /// # Returns
+    /// True if equal, false otherwise
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.deleted_bases == other.deleted_bases
@@ -317,56 +354,58 @@ impl PartialEq for BaseCall {
 impl Eq for BaseCall {}
 
 impl Hash for BaseCall {
+
+    /// Hash the BaseCall instance
+    ///
+    /// # Returns
+    /// A hash value for the BaseCall
     fn hash<H: Hasher>(&self, state: &mut H) {
-        /// Hash the BaseCall instance
-        ///
-        /// # Returns
-        /// A hash value for the BaseCall
+        
         self.base.hash(state);
         self.deleted_bases.hash(state);
         self.insertion_bases.hash(state);
     }
 }
 
-
+/// A chunk of the genome for processing
+///
+/// # Fields
+/// * `contig` - Chromosome or contig name
+/// * `start` - Start position of the chunk (0-based)
+/// * `end` - End position of the chunk (0-based, exclusive)
 struct GenomeChunk {
-    /// A chunk of the genome for processing
-    ///
-    /// # Fields
-    /// * `contig` - Chromosome or contig name
-    /// * `start` - Start position of the chunk (0-based)
-    /// * `end` - End position of the chunk (0-based, exclusive)
     contig: String,
     start: u64,
     end: u64,
 }
 
 impl GenomeChunk {
+    /// Create a new GenomeChunk instance
+    ///
+    /// # Arguments
+    /// * `contig` - Chromosome or contig name
+    /// * `start` - Start position of the chunk (0-based)
+    /// * `end` - End position of the chunk (0-based, exclusive)
+    /// # Returns
+    /// A new GenomeChunk instance
     fn new(contig: String, start: u64, end: u64) -> Self {
-        /// Create a new GenomeChunk instance
-        ///
-        /// # Arguments
-        /// * `contig` - Chromosome or contig name
-        /// * `start` - Start position of the chunk (0-based)
-        /// * `end` - End position of the chunk (0-based, exclusive)
-        /// # Returns
-        /// A new GenomeChunk instance
         GenomeChunk { contig, start, end }
     }
 }
 
+/// Divide the genome into chunks for processing
+///
+/// # Arguments
+/// * `fasta_path` - Path to the reference FASTA file
+/// * `chunk_size` - Size of each chunk
+/// 
+/// # Returns
+/// A vector of GenomeChunk instances
 fn get_genome_chunks(
     fasta_path: &str,
     chunk_size: u64,
 ) -> Vec<GenomeChunk> {
-    /// Divide the genome into chunks for processing
-    ///
-    /// # Arguments
-    /// * `fasta_path` - Path to the reference FASTA file
-    /// * `chunk_size` - Size of each chunk
-    /// 
-    // # Returns
-    /// A vector of GenomeChunk instances
+    
     let reader = faidx::Reader::from_path(fasta_path).expect("Failed to open FASTA file");
     let seq_names = reader.seq_names().expect("Failed to get sequence names");
 
@@ -383,15 +422,15 @@ fn get_genome_chunks(
     chunks
 }
 
+/// Validate that the FAI and BAM headers have matching contigs and lengths
+///
+/// # Arguments
+/// * `fasta_path` - Path to the reference FASTA file
+/// * `bam_path` - Path to the BAM file
+///
+/// # Returns
+/// Ok(()) if validation passes, error otherwise
 fn validate_fai_and_bam(fasta_path: &str, bam_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    /// Validate that the FAI and BAM headers have matching contigs and lengths
-    ///
-    /// # Arguments
-    /// * `fasta_path` - Path to the reference FASTA file
-    /// * `bam_path` - Path to the BAM file
-    ///
-    /// # Returns
-    /// Ok(()) if validation passes, error otherwise
 
     let fai_reader = faidx::Reader::from_path(fasta_path)?;
     let bam_reader = bam::Reader::from_path(bam_path)?;
@@ -429,17 +468,17 @@ fn validate_fai_and_bam(fasta_path: &str, bam_path: &str) -> Result<(), Box<dyn 
     Ok(())
 }
 
+/// Determine the calling directive based on reference and alternate bases
+///
+/// # Arguments
+/// * `ref_base` - Reference base at the position
+/// * `alt_candidates` - Set of alternate base candidates
+/// * `upstream_base` - Base upstream of the position
+/// * `downstream_base` - Base downstream of the position
+///
+/// # Returns
+/// A CallingDirective indicating where to call variants
 fn find_where_to_call_variants(ref_base: char, alt_candidates: &HashSet<BaseCall>, upstream_base: char, downstream_base: char) -> CallingDirective {
-    /// Determine the calling directive based on reference and alternate bases
-    ///
-    /// # Arguments
-    /// * `ref_base` - Reference base at the position
-    /// * `alt_candidates` - Set of alternate base candidates
-    /// * `upstream_base` - Base upstream of the position
-    /// * `downstream_base` - Base downstream of the position
-    ///
-    /// # Returns
-    /// A CallingDirective indicating where to call variants
     
     let alt_candidate_bases: HashSet<char> = alt_candidates.iter().map(|bc| bc.base).collect();
     
@@ -460,15 +499,14 @@ fn find_where_to_call_variants(ref_base: char, alt_candidates: &HashSet<BaseCall
     }
 }
 
+/// Generate the VCF header string based on the BAM header
+///
+/// # Arguments
+/// * `header` - The BAM header view
+///
+/// # Returns
+/// A string representing the VCF header
 fn get_vcf_header(header: &bam::HeaderView) -> String {
-    /// Generate the VCF header string based on the BAM header
-    ///
-    /// # Arguments
-    /// * `header` - The BAM header view
-    ///
-    /// # Returns
-    /// A string representing the VCF header
-    
 
     let contigs = header.target_names().iter()
         .map(|name| {
@@ -495,32 +533,32 @@ fn get_vcf_header(header: &bam::HeaderView) -> String {
     )
 }
 
+/// Calculate the right-tail p-value for a binomial distribution
+///
+/// # Arguments
+/// * `n` - Number of trials
+/// * `k` - Number of successes
+/// * `p` - Probability of success on each trial
+///
+/// # Returns
+/// Right-tail p-value
 fn right_tail_binomial_pval(n: u64, k: u64, p: f64) -> f64 {
-    /// Calculate the right-tail p-value for a binomial distribution
-    ///
-    /// # Arguments
-    /// * `n` - Number of trials
-    /// * `k` - Number of successes
-    /// * `p` - Probability of success on each trial
-    ///
-    /// # Returns
-    /// Right-tail p-value
-
+    
     let binom = Binomial::new(p, n).expect("Failed to create binomial dist");
     let cdf = binom.cdf((k - 1) as u64); 
     1.0 - cdf
 }
 
+/// Identify candidate base calls based on statistical significance
+///
+/// # Arguments
+/// * `counts` - A hashmap of BaseCall to their counts
+/// * `ref_base` - Reference base at the position
+/// * `error_rate` - Expected general error rate
+///
+/// # Returns
+/// A set of candidate BaseCall instances
 fn get_count_vec_candidates(counts: &HashMap<BaseCall, usize>, ref_base: char, error_rate: f64) -> HashSet<BaseCall> {
-    /// Identify candidate base calls based on statistical significance
-    ///
-    /// # Arguments
-    /// * `counts` - A hashmap of BaseCall to their counts
-    /// * `ref_base` - Reference base at the position
-    /// * `error_rate` - Expected general error rate
-    ///
-    /// # Returns
-    /// A set of candidate BaseCall instances
 
     let mut candidates = HashSet::new();
 
@@ -539,16 +577,16 @@ fn get_count_vec_candidates(counts: &HashMap<BaseCall, usize>, ref_base: char, e
     candidates
 }
 
+/// Assign genotype based on binomial probabilities
+///
+/// # Arguments
+/// * `alt_counts` - Count of reads supporting the alternate allele
+/// * `depth` - Total read depth at the position
+/// * `error_rate` - Expected general error rate
+///
+/// # Returns
+/// A Genotype instance with assigned genotype and quality score
 fn assign_genotype(alt_counts: usize, depth: usize, error_rate: f64) -> Genotype {
-    /// Assign genotype based on binomial probabilities
-    ///
-    /// # Arguments
-    /// * `alt_counts` - Count of reads supporting the alternate allele
-    /// * `depth` - Total read depth at the position
-    /// * `error_rate` - Expected general error rate
-    ///
-    /// # Returns
-    /// A Genotype instance with assigned genotype and quality score
 
     let homo_ref_prob = Binomial::new(error_rate, depth as u64)
         .unwrap()
@@ -571,15 +609,14 @@ fn assign_genotype(alt_counts: usize, depth: usize, error_rate: f64) -> Genotype
     Genotype::new(gt, best_prob, total)
 }
 
-
+/// Retrieve an NM tag from a record
+///
+/// # Arguments
+/// * `record` - The record to retrieve the Tags value from
+///
+/// # Returns
+/// The value of the NM tag
 fn get_nm_tag(record: &bam::Record) -> u32 {
-    /// Retrieve an NM tag from a record
-    ///
-    /// # Arguments
-    /// * `record` - The record to retrieve the Tags value from
-    ///
-    /// # Returns
-    /// The value of the NM tag
 
     match record.aux(b"NM") {
         Ok(bam::record::Aux::I8(n)) => n as u32,
@@ -592,22 +629,21 @@ fn get_nm_tag(record: &bam::Record) -> u32 {
     }
 }
 
-
+/// Extract base call counts from a pileup
+///
+/// # Arguments
+/// * `pileup` - The pileup to extract counts from
+/// * `min_bq` - Minimum base quality
+/// * `min_mapq` - Minimum mapping quality
+/// * `end_of_read_cutoff` - End of read cutoff for SNPs
+/// * `indel_end_of_read_cutoff` - End of read cutoff for indels
+/// * `max_mismatches` - Maximum allowed mismatches in a read
+/// * `ref_seq` - The reference sequence as a byte vector
+/// * `ref_pos` - The reference position
+///
+/// # Returns
+/// A tuple of three hashmaps: (R1 forward counts, R1 reverse counts, total counts)
 fn extract_pileup_counts(pileup: &Pileup, min_bq: usize, min_mapq: usize, end_of_read_cutoff: usize, indel_end_of_read_cutoff: usize, max_mismatches: u32, ref_seq: &Vec<u8>, ref_pos: u32) -> (HashMap<BaseCall, usize>, HashMap<BaseCall, usize>, HashMap<BaseCall, usize>) {
-    /// Extract base call counts from a pileup
-    ///
-    /// # Arguments
-    /// * `pileup` - The pileup to extract counts from
-    /// * `min_bq` - Minimum base quality
-    /// * `min_mapq` - Minimum mapping quality
-    /// * `end_of_read_cutoff` - End of read cutoff for SNPs
-    /// * `indel_end_of_read_cutoff` - End of read cutoff for indels
-    /// * `max_mismatches` - Maximum allowed mismatches in a read
-    /// * `ref_seq` - The reference sequence as a byte vector
-    /// * `ref_pos` - The reference position
-    ///
-    /// # Returns
-    /// A tuple of three hashmaps: (R1 forward counts, R1 reverse counts, total counts)
 
     let mut r_one_f_counts = HashMap::new();
     let mut r_one_r_counts = HashMap::new();
@@ -682,7 +718,26 @@ fn extract_pileup_counts(pileup: &Pileup, min_bq: usize, min_mapq: usize, end_of
     (r_one_f_counts, r_one_r_counts, total_counts)
 }
 
-fn workflow(
+/// Main workflow for variant calling
+///
+/// # Arguments
+/// * `bam_path` - Path to the BAM file
+/// * `ref_path` - Path to the reference FASTA file
+/// * `vcf_path` - Path to the output VCF file
+/// * `min_bq` - Minimum base quality
+/// * `min_mapq` - Minimum mapping quality
+/// * `min_depth` - Minimum read depth
+/// * `end_of_read_cutoff` - End of read cutoff for SNPs
+/// * `indel_end_of_read_cutoff` - End of read cutoff for indels
+/// * `max_mismatches` - Maximum allowed mismatches in a read
+/// * `min_ao` - Minimum alternate allele observations
+/// * `num_threads` - Number of threads to use
+/// * `chunk_size` - Size of each genome chunk
+/// * `error_rate` - Expected general error rate
+///
+/// # Returns
+/// Ok(()) if workflow completes successfully, error otherwise
+pub fn workflow(
     bam_path: &str,
     ref_path: &str,
     vcf_path: &str,
@@ -697,26 +752,7 @@ fn workflow(
     chunk_size: u64,
     error_rate: f64,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    /// Main workflow for variant calling
-    ///
-    /// # Arguments
-    /// * `bam_path` - Path to the BAM file
-    /// * `ref_path` - Path to the reference FASTA file
-    /// * `vcf_path` - Path to the output VCF file
-    /// * `min_bq` - Minimum base quality
-    /// * `min_mapq` - Minimum mapping quality
-    /// * `min_depth` - Minimum read depth
-    /// * `end_of_read_cutoff` - End of read cutoff for SNPs
-    /// * `indel_end_of_read_cutoff` - End of read cutoff for indels
-    /// * `max_mismatches` - Maximum allowed mismatches in a read
-    /// * `min_ao` - Minimum alternate allele observations
-    /// * `num_threads` - Number of threads to use
-    /// * `chunk_size` - Size of each genome chunk
-    /// * `error_rate` - Expected general error rate
-    ///
-    /// # Returns
-    /// Ok(()) if workflow completes successfully, error otherwise
-
+    
     validate_fai_and_bam(ref_path, bam_path)?;
 
     let ref_reader = faidx::Reader::from_path(ref_path)?;
@@ -957,18 +993,18 @@ mod tests {
     use rust_htslib::faidx;
 
     macro_rules! make_variant_test {
-        /// Macro to create variant calling tests
-        ///
-        /// # Arguments
-        /// * `$fn_name` - Name of the test function
-        /// * `$bam_file` - BAM file to use for the test
-        /// * `$pos` - Position of the variant
-        /// * `$ref_base` - Expected reference base
-        /// * `$alt_base` - Expected alternate base
-        /// * `$gt` - Expected genotype
-        ///
-        /// # Returns
-        /// A test function
+        // Macro to create variant calling tests
+        //
+        // # Arguments
+        // * `$fn_name` - Name of the test function
+        // * `$bam_file` - BAM file to use for the test
+        // * `$pos` - Position of the variant
+        // * `$ref_base` - Expected reference base
+        // * `$alt_base` - Expected alternate base
+        // * `$gt` - Expected genotype
+        //
+        // # Returns
+        // A test function
 
         ($fn_name:ident, $bam_file:expr, $pos:expr, $ref_base:expr, $alt_base:expr, $gt:expr) => {
             #[test]
@@ -1013,41 +1049,40 @@ mod tests {
         };
     }
 
-    /// Define tests using the macro
 
-    /// This test tests a call where methylation is not expected to interfer and is homozygous alt
+    // This test tests a call where methylation is not expected to interfer and is homozygous alt
     make_variant_test!(test_both_strands_chr11_8198900_a_c_homo, "both_strands_chr11_8198900_A_C_homo.bam", 8198900, "A", "C", "1/1");
     
-    /// This test tests a call where methylation is not expected to interfer and is heterozygous 
+    // This test tests a call where methylation is not expected to interfer and is heterozygous 
     make_variant_test!(test_both_strands_chr11_8198951_t_a_het, "both_strands_chr11_8198951_T_A_het.bam", 8198951, "T", "A", "0/1");
     
-    /// This test tests a call where there was a denovo CpG created and is homozygous alt where OB is expected to be non-methylated
+    // This test tests a call where there was a denovo CpG created and is homozygous alt where OB is expected to be non-methylated
     make_variant_test!(test_denovo_ob_chr11_134755809_t_c_homo, "denovo_ob_chr11_134755809_T_C_homo.bam", 134755809, "T", "C", "1/1");
     
-    /// This test tests a call where there was a denovo CpG created and is heterozygous where OB is expected to be non-methylated
+    // This test tests a call where there was a denovo CpG created and is heterozygous where OB is expected to be non-methylated
     make_variant_test!(test_denovo_ob_chr11_134911365_t_c_het, "denovo_ob_chr11_134911365_T_C_het.bam", 134911365, "T", "C", "0/1");
     
-    /// This test tests a call where there was a denovo CpG created and is heterozygous where OT is expected to be non-methylated
+    // This test tests a call where there was a denovo CpG created and is heterozygous where OT is expected to be non-methylated
     make_variant_test!(test_denovo_ot_chr11_134749303_a_g_het, "denovo_ot_chr11_134749303_A_G_het.bam", 134749303, "A", "G", "0/1");
     
-    /// This test tests a call where there was a denovo CpG created and is homozygous alt where OT is expected to be non-methylated
+    // This test tests a call where there was a denovo CpG created and is homozygous alt where OT is expected to be non-methylated
     make_variant_test!(test_denovo_ot_chr11_134479860_a_g_homo, "denovo_ot_chr11_134479860_A_G_homo.bam", 134479860, "A", "G", "1/1");
     
-    /// This test tests a reference CpG site where there is a heterozygous snp and OB expected to be the non-methylated strand
+    // This test tests a reference CpG site where there is a heterozygous snp and OB expected to be the non-methylated strand
     make_variant_test!(test_ref_ob_chr11_134012307_c_a_het, "ref_ob_chr11_134012307_C_A_het.bam", 134012307, "C", "A", "0/1");
     
-    /// This test tests a reference CpG site where there is a homozygous alt snp and OB expected to be the non-methylated strand
+    // This test tests a reference CpG site where there is a homozygous alt snp and OB expected to be the non-methylated strand
     make_variant_test!(test_ref_ob_chr11_134610622_c_t_homo, "ref_ob_chr11_134610622_C_T_homo.bam", 134610622, "C", "T", "1/1");
 
-    /// This test tests a reference CpG site where there is a homozygous alt snp and OT expected to be the non-methylated strand
+    // This test tests a reference CpG site where there is a homozygous alt snp and OT expected to be the non-methylated strand
     make_variant_test!(test_ref_ot_chr11_134473154_g_a_homo, "ref_ot_chr11_134473154_G_A_homo.bam", 134473154, "G", "A", "1/1");
     
-    /// This test tests a reference CpG site where there is a heterozygous snp and OT expected to be the non-methylated strand
+    // This test tests a reference CpG site where there is a heterozygous snp and OT expected to be the non-methylated strand
     make_variant_test!(test_ref_ot_chr11_8195526_g_a_het, "ref_ot_chr11_8195526_G_A_het.bam", 8195526, "G", "A", "0/1");
 
     #[test]
 fn test_methylation_site_no_variants() {
-    /// Tests a fully methylated site where the are no variants expected
+    // Tests a fully methylated site where the are no variants expected
     let test_ref = "test_assets/chr11.fasta";
     let test_bam = "test_assets/testing_bams/methylation_site_chr11_134755601_134755621.bam";
 
