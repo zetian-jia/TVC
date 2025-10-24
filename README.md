@@ -79,3 +79,47 @@ taps_variant_caller \
     reference.fa \
     sample.bam \
     output.vcf
+
+## Development
+
+### Git LFS Requirement
+
+This project uses [Git LFS](https://git-lfs.github.com/) (Large File Storage) for handling large files specifically for testing assets.  
+
+Before starting development, ensure Git LFS is installed on your system.
+
+#### Install Git LFS
+
+- **macOS (Homebrew):**
+    ```bash
+    brew install git-lfs
+    ```
+- **Linux (Debian/Ubuntu):**
+    ```bash
+    sudo apt install git-lfs
+    ```
+- **Windows:**
+    Download and run the installer from [https://git-lfs.com](https://git-lfs.com).
+
+#### Initialize Git LFS
+After installation, run:
+```bash
+git lfs install
+```
+
+#### Pulling LFS Files
+When cloning the repository, make sure to fetch LFS files as well:
+```bash
+git clone <repo_url>
+cd <repo_name>
+git lfs pull
+```
+
+For existing repositories:
+```bash
+git pull
+git lfs pull
+```
+
+> **Note:** Development cannot proceed without Git LFS installed, as some large files required for the project are managed through LFS.
+

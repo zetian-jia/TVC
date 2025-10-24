@@ -708,7 +708,7 @@ fn extract_pileup_counts(
                 continue;
             }
 
-            if record.is_secondary() || record.is_supplementary() {
+            if record.is_secondary() || record.is_supplementary() || record.is_duplicate() {
                 continue;
             }
 
@@ -724,23 +724,24 @@ fn extract_pileup_counts(
                     continue;
                 }
             }
-
-            if record.is_reverse() && is_stranded_read(&record, stranded_read) {
+            
+            let is_stranded_read_status = is_stranded_read(&record, stranded_read);
+            if record.is_reverse() && is_stranded_read_status {
                 r_one_r_counts.insert(
                     base_call.clone(),
                     r_one_r_counts.get(&base_call).unwrap_or(&0) + 1,
                 );
-            } else if !record.is_reverse() && is_stranded_read(&record, stranded_read) {
+            } else if !record.is_reverse() && is_stranded_read_status {
                 r_one_f_counts.insert(
                     base_call.clone(),
                     r_one_f_counts.get(&base_call).unwrap_or(&0) + 1,
                 );
-            } else if record.is_reverse() && !is_stranded_read(&record, stranded_read) {
+            } else if record.is_reverse() && !is_stranded_read_status {
                 r_one_f_counts.insert(
                     base_call.clone(),
                     r_one_f_counts.get(&base_call).unwrap_or(&0) + 1,
                 );
-            } else if !record.is_reverse() && !is_stranded_read(&record, stranded_read) {
+            } else if !record.is_reverse() && !is_stranded_read_status {
                 r_one_r_counts.insert(
                     base_call.clone(),
                     r_one_r_counts.get(&base_call).unwrap_or(&0) + 1,
