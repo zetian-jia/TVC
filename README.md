@@ -15,7 +15,7 @@ The algorithm models general noise using a **binomial distribution**, then estim
 ## Assumptions and Input requirements
 
 - TVC assumes diploid genotypes.  
-- TVC assumes that the orientation of R1 is in the same orientation of the original molecule. This means adapters that do not preserve orientation such as AB adapters are not supported. Reads that flip the orientation must be flipped in the mapper so R2 is mapped as R1.
+- TVC assumes that the orientation of either R1 or R2 is in the same orientation of the original molecule. This means adapters that do not preserve orientation such as AB adapters are not supported.
 - Reference and BAM files must be indexed (`.fai` and `.bai` respectively) and bams must contain NM tag entries.
 - Single-end data is not supported at this time
 
@@ -48,6 +48,7 @@ taps_variant_caller [OPTIONS] <INPUT_REF> <INPUT_BAM> <OUTPUT_VCF>
 | `-t, --num-threads <NUM_THREADS>` | Number of threads to use | `4` |
 | `-c, --chunk-size <CHUNK_SIZE>` | Number of reference bases processed per thread batch | `1,000,000` |
 | `-p, --error-rate <ERROR_RATE>` | Estimated per-base sequencing error rate used for binomial modeling | `0.005` |
+| `-r, --stranded_read <READ_NUMBER>` | The read that is in the same orientation of the molecule (R1/R2) 
 | `-h, --help` | Print help message | — |
 
 ---
