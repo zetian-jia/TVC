@@ -143,7 +143,7 @@ jobs:
       # Log in to Amazon ECR Public
       - name: Log in to Amazon ECR Public
         run: |
-          echo ${{ secrets.AWS_SECRET_ACCESS_KEY }} | \
+          aws ecr-public get-login-password --region us-east-1 | \
           docker login --username AWS --password-stdin public.ecr.aws/${{ env.PUBLIC_REPO_ID }}
 
       # Set up Docker Buildx
