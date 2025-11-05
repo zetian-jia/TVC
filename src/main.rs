@@ -80,7 +80,7 @@ struct Args {
 /// * `depth` - Read depth at the variant position
 /// * `alt_counts` - Count of reads supporting the alternate allele
 /// * `calling_directive` - Calling directive for the variant caller
-#[derive(Clone, Debug) ]
+#[derive(Clone, Debug)]
 struct Variant {
     contig: String,
     pos: u32,
@@ -192,7 +192,6 @@ struct Genotype {
     genotype: String,
     score: f64,
 }
-
 
 impl Genotype {
     /// Create a new Genotype instance with phred-scaled quality score
@@ -645,7 +644,6 @@ fn is_stranded_read(record: &bam::Record, stranded_read: &ReadNumber) -> bool {
     read_orientation == *stranded_read
 }
 
-
 /// Extract base call counts from a pileup
 ///
 /// # Arguments
@@ -724,7 +722,7 @@ fn extract_pileup_counts(
                     continue;
                 }
             }
-            
+
             let is_stranded_read_status = is_stranded_read(&record, stranded_read);
             if record.is_reverse() && is_stranded_read_status {
                 r_one_r_counts.insert(
@@ -913,7 +911,7 @@ fn call_variants(
     max_mismatches: u32,
     min_ao: u32,
     error_rate: f64,
-    stranded_read: &ReadNumber
+    stranded_read: &ReadNumber,
 ) -> Result<Vec<Variant>, Box<dyn std::error::Error>> {
     // Placeholder for the workflow function
     // This is where the main logic of your variant caller would go
@@ -1109,7 +1107,10 @@ mod tests {
                 let chunk = GenomeChunk::new(contig.to_string(), $pos, $pos + 1);
 
                 let variants = call_variants(
-                    &chunk, test_bam, &ref_seq, 20,    // min_bq
+                    &chunk,
+                    test_bam,
+                    &ref_seq,
+                    20,    // min_bq
                     1,     // min_mapq
                     1,     // min_depth
                     5,     // end_of_read_cutoff
@@ -1265,15 +1266,18 @@ mod tests {
         let chunk = GenomeChunk::new(contig.to_string(), 134755601, 134755621);
 
         let variants = call_variants(
-            &chunk, test_bam, &ref_seq, 20,    // min_bq
-            1,     // min_mapq
-            1,     // min_depth
-            5,     // end_of_read_cutoff
-            20,    // indel_end_of_read_cutoff
-            10,    // max_mismatches
-            1,     // min_ao
-            0.005, // error_rate
-            &ReadNumber::R1 // stranded_read
+            &chunk,
+            test_bam,
+            &ref_seq,
+            20,              // min_bq
+            1,               // min_mapq
+            1,               // min_depth
+            5,               // end_of_read_cutoff
+            20,              // indel_end_of_read_cutoff
+            10,              // max_mismatches
+            1,               // min_ao
+            0.005,           // error_rate
+            &ReadNumber::R1, // stranded_read
         )
         .expect("call_variants failed");
 
@@ -1292,10 +1296,13 @@ mod tests {
     fn test_single_ended_reads() {
         // Tests that single-ended reads are handled correctly
         let test_ref = "test_assets/chr11.fasta";
-        let test_bam = "test_assets/testing_bams/methylation_site_chr11_134755601_134755621.single_end.bam";
+        let test_bam =
+            "test_assets/testing_bams/methylation_site_chr11_134755601_134755621.single_end.bam";
         // Load reference
-        let ref_reader = faidx::Reader::from_path(test_ref).expect("Failed to
-    open FASTA");
+        let ref_reader = faidx::Reader::from_path(test_ref).expect(
+            "Failed to
+    open FASTA",
+        );
         let contig = "chr11";
         let seq_len = ref_reader.fetch_seq_len(contig);
         let ref_seq: Vec<u8> = ref_reader
@@ -1309,15 +1316,18 @@ mod tests {
         let chunk = GenomeChunk::new(contig.to_string(), 134755601, 134755621);
 
         let variants = call_variants(
-            &chunk, test_bam, &ref_seq, 20,    // min_bq
-            1,     // min_mapq
-            1,     // min_depth
-            5,     // end_of_read_cutoff
-            20,    // indel_end_of_read_cutoff
-            10,    // max_mismatches
-            1,     // min_ao
-            0.005, // error_rate
-            &ReadNumber::R1 // stranded_read
+            &chunk,
+            test_bam,
+            &ref_seq,
+            20,              // min_bq
+            1,               // min_mapq
+            1,               // min_depth
+            5,               // end_of_read_cutoff
+            20,              // indel_end_of_read_cutoff
+            10,              // max_mismatches
+            1,               // min_ao
+            0.005,           // error_rate
+            &ReadNumber::R1, // stranded_read
         )
         .expect("call_variants failed");
 
@@ -1333,13 +1343,15 @@ mod tests {
     }
 
     #[test]
-    fn test_read_two_stranded(){
+    fn test_read_two_stranded() {
         // Tests that Read 2 stranded reads are handled correctly
         let test_ref = "test_assets/chr11.fasta";
         let test_bam = "test_assets/testing_bams/methylation_site_chr11_134755601_134755621.bam";
         // Load reference
-        let ref_reader = faidx::Reader::from_path(test_ref).expect("Failed to
-    open FASTA");
+        let ref_reader = faidx::Reader::from_path(test_ref).expect(
+            "Failed to
+    open FASTA",
+        );
         let contig = "chr11";
         let seq_len = ref_reader.fetch_seq_len(contig);
         let ref_seq: Vec<u8> = ref_reader
@@ -1352,15 +1364,18 @@ mod tests {
         // Define chunk covering the whole methylation region
         let chunk = GenomeChunk::new(contig.to_string(), 134755601, 134755621);
         let variants = call_variants(
-            &chunk, test_bam, &ref_seq, 20,    // min_bq
-            1,     // min_mapq
-            1,     // min_depth
-            5,     // end_of_read_cutoff
-            20,    // indel_end_of_read_cutoff
-            10,    // max_mismatches
-            1,     // min_ao
-            0.005, // error_rate
-            &ReadNumber::R2 // stranded_read
+            &chunk,
+            test_bam,
+            &ref_seq,
+            20,              // min_bq
+            1,               // min_mapq
+            1,               // min_depth
+            5,               // end_of_read_cutoff
+            20,              // indel_end_of_read_cutoff
+            10,              // max_mismatches
+            1,               // min_ao
+            0.005,           // error_rate
+            &ReadNumber::R2, // stranded_read
         )
         .expect("call_variants failed");
         let filtered_variants: Vec<&Variant> = variants
@@ -1370,8 +1385,8 @@ mod tests {
 
         assert!(
             filtered_variants.len() == 2,
-            "Since the R2 was flipped the caller should call these instead got {}", filtered_variants.len()
+            "Since the R2 was flipped the caller should call these instead got {}",
+            filtered_variants.len()
         );
     }
-        
 }
