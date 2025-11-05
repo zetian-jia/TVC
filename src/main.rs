@@ -717,24 +717,26 @@ fn extract_pileup_counts(
                 if qpos < end_of_read_cutoff || qpos >= read_len - end_of_read_cutoff {
                     continue;
                 }
-            } else if qpos < indel_end_of_read_cutoff || qpos >= read_len - indel_end_of_read_cutoff {
-                    continue;
-                
+            } else if qpos < indel_end_of_read_cutoff || qpos >= read_len - indel_end_of_read_cutoff
+            {
+                continue;
             }
 
             let is_stranded_read_status = is_stranded_read(&record, stranded_read);
-            
-            if (record.is_reverse() && is_stranded_read_status) || (!record.is_reverse() && !is_stranded_read_status) {
+
+            if (record.is_reverse() && is_stranded_read_status)
+                || (!record.is_reverse() && !is_stranded_read_status)
+            {
                 r_one_r_counts.insert(
                     base_call.clone(),
                     r_one_r_counts.get(&base_call).unwrap_or(&0) + 1,
                 );
-            } else  {
+            } else {
                 r_one_f_counts.insert(
                     base_call.clone(),
                     r_one_f_counts.get(&base_call).unwrap_or(&0) + 1,
                 );
-            } 
+            }
             total_counts.insert(
                 base_call.clone(),
                 total_counts.get(&base_call).unwrap_or(&0) + 1,
