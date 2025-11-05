@@ -95,7 +95,7 @@ jobs:
       - name: Package binary
         run: |
           mkdir -p release
-          cp target/${{ matrix.target }}/release/tvc/
+          cp target/${{ matrix.target }}/release/tvc/ release/tvc
           tar -czf tvc-${{ matrix.target }}.tar.gz -C release tvc
 
       - name: Upload artifact
@@ -157,7 +157,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           tags: |
             public.ecr.aws/${{ env.PUBLIC_REPO_ID }}/${{ env.ECR_REPOSITORY }}:latest
             public.ecr.aws/${{ env.PUBLIC_REPO_ID }}/${{ env.ECR_REPOSITORY }}:${{ env.RELEASE_TAG }}
