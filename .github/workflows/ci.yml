@@ -130,6 +130,7 @@ jobs:
             echo "RELEASE_TAG=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
           else
             echo "RELEASE_TAG=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_ENV
+          fi
 
       # Configure AWS credentials
       - name: Configure AWS credentials
