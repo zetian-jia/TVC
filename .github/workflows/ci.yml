@@ -47,6 +47,9 @@ jobs:
       - name: Run cargo clippy
         run: cargo clippy -- -D warnings
 
+      - name: Pull Git LFS files
+        run: git lfs pull
+
       - name: Run cargo unit tests
         run: cargo test --all --locked --verbose
 
