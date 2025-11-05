@@ -1,11 +1,11 @@
-name: CI/CD Docker Build + Tests
+name: CI/CD Docker + Binaries + Release
 
 on:
   push:
     branches:
-      - ci_testing           # Run everything on this test branch
+      - ci_testing           # Run full pipeline on this branch for testing
     tags:
-      - 'v*.*.*'             # Run full build on version tags
+      - 'v*.*.*'             # Run full release pipeline on version tags
   pull_request:
     branches:
       - main                 # Run gated checks on PRs to main
@@ -47,27 +47,75 @@ jobs:
       - name: Run cargo clippy
         run: cargo clippy -- -D warnings
 
-      - name: Pull Git LFS files
-        run: git lfs pull
-
       - name: Run cargo unit tests
         run: cargo test --all --locked --verbose
 
+
   # ======================
-  # Build and Push Docker Image
+  # Build Multi-Arch Rust Binaries
+  # ======================
+  build-binaries:
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package binary
+        run: |
+          mkdir -p release
+          cp target/${{ matrix.target }}/release/taps_variant_caller release/
+          tar -czf taps_variant_caller-${{ matrix.target }}.tar.gz -C release taps_variant_caller
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: taps_variant_caller-${{ matrix.target }}
+          path: taps_variant_caller-${{ matrix.target }}.tar.gz
+
+
+  # ======================
+  # Build and Push Docker Image (amd64 only)
   # ======================
   build-and-push:
-    needs: test
+    needs: [test]
     runs-on: ubuntu-latest
-
-    # Only build/push when a tag or test branch triggers it
     if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/ci_testing'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Extract a tag (vX.Y.Z → X.Y.Z) or branch name for the Docker tag
+      # Extract a tag (vX.Y.Z → X.Y.Z) or branch name for Docker tag
       - name: Extract version or branch name
         id: tag
         run: |
@@ -76,7 +124,6 @@ jobs:
           else
             echo "RELEASE_TAG=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_ENV
           fi
-
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -93,9 +140,29 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64      # ONLY amd64 now for faster builds
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/taps_variant_caller:latest
             ${{ secrets.DOCKER_USERNAME }}/taps_variant_caller:${{ env.RELEASE_TAG }}
 
 
+  # ======================
+  #  Create GitHub Release (only for tags)
+  # ======================
+  release:
+    needs: [build-binaries, build-and-push]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download all built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./artifacts/**/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
