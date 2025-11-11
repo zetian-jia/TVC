@@ -100,7 +100,7 @@ tvc \
 
 ## Benchmarking TVC and other Taps+ materials 
 
-Please see how we calculate F1 scores and it's current performance on a demo data set in this notebook.
+Please see how we calculate F1 scores and it's current performance on a demo data set in [this notebook](analysis/TVC_benchmarking.ipynb).
 
 We have other methylation based scripts in our [taps foundry](https://github.com/watchmaker-genomics/taps-foundry)
 
