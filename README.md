@@ -1,18 +1,36 @@
-# Taps Variant Caller (TVC)
+# Taps+ Variant Caller (TVC)
 
-**TVC** is a germline variant caller purpose-built for **TAPS (TET-assisted pyridine borane sequencing)** data.  
-It is **CpG-aware**, **read-oriented**, and designed to factor out subtle methylation-induced patterns in order to avoid overcalling noise.
+**TVC** is a germline variant caller purpose-built for **TAPS+ (TET-assisted pyridine borane sequencing)** data. It is **CpG-aware**, **read-oriented**, and designed to factor out subtle methylation-induced patterns in order to avoid overcalling noise.
 
 ---
+
+## Installation
+
+You can obtain prebuilt binaries or container images from our official distribution channels:
+
+## Option 1: Download Binaries
+Precompiled binaries for macOS, Linux are available under the [**Releases**](https://github.com/watchmaker-genomics/TVC/releases) section of this repository.
+
+## Option 2: Pull from Amazon ECR Public
+
+The tool is also available as an amd64-only container image on Amazon ECR.
+
+### Pull the latest image
+docker pull public.ecr.aws/e5r9o8m6/watchmakergenomics/tvc:latest
+
+### Run directly
+docker run -it --rm public.ecr.aws/e5r9o8m6/watchmakergenomics/tvc:latest -h
+
+> Note: the `-it` allows for the progress bar to become visible when run. 
+
 
 ## Overview
 
-TVC performs variant calling while accounting for **CpG context** — both in the reference genome and in the observed read data.  
-The algorithm models general noise using a **binomial distribution**, then estimates the most likely genotype (homozygous reference, heterozygous, or homozygous alternate) given observed allele counts and error rate parameters. This is inspired by the algorithm used in [Rastair](https://bitbucket.org/bsblabludwig/rastair/src/master/) .
+TVC performs variant calling while accounting for **CpG context** — both in the reference genome and in the observed read data. The algorithm models general noise using a **binomial distribution**, then estimates the most likely genotype (homozygous reference, heterozygous, or homozygous alternate) given observed allele counts and error rate parameters. This is inspired by the algorithm for determining genotypes in CpG that is used in [Rastair](https://bitbucket.org/bsblabludwig/rastair/src/master/) which was developed Benjamin Schuster-Böckler's lab at the University of Oxford, Ludwig Institute for Cancer Research.
 
 ---
 
-## Assumptions and Input requirements
+## Assumptions and Input Requirements
 
 - TVC assumes diploid genotypes.  
 - TVC assumes that the orientation of either R1 or R2 is in the same orientation of the original molecule. This means adapters that do not preserve orientation such as AB adapters are not supported.
@@ -21,7 +39,7 @@ The algorithm models general noise using a **binomial distribution**, then estim
 ## Usage
 
 ```
-taps_variant_caller [OPTIONS] <INPUT_REF> <INPUT_BAM> <OUTPUT_VCF>
+tvc [OPTIONS] <INPUT_REF> <INPUT_BAM> <OUTPUT_VCF>
 ```
 
 ### Arguments
@@ -29,7 +47,7 @@ taps_variant_caller [OPTIONS] <INPUT_REF> <INPUT_BAM> <OUTPUT_VCF>
 | Argument | Description |
 |-----------|-------------|
 | `<INPUT_REF>` | Reference FASTA file |
-| `<INPUT_BAM>` | Aligned BAM file (paired-end) |
+| `<INPUT_BAM>` | Aligned and indexed BAM file |
 | `<OUTPUT_VCF>` | Output VCF path |
 
 ### Options
@@ -46,7 +64,7 @@ taps_variant_caller [OPTIONS] <INPUT_REF> <INPUT_BAM> <OUTPUT_VCF>
 | `-t, --num-threads <NUM_THREADS>` | Number of threads to use | `4` |
 | `-c, --chunk-size <CHUNK_SIZE>` | Number of reference bases processed per thread batch | `1,000,000` |
 | `-p, --error-rate <ERROR_RATE>` | Estimated per-base sequencing error rate used for binomial modeling | `0.005` |
-| `-r, --stranded_read <READ_NUMBER>` | The read that is in the same orientation of the molecule (R1/R2) | `R1`|
+| `-r, --stranded_read <READ_NUMBER>` | The read that is in the same orientation of the molecule (r1/r2) | `r1`|
 | `-h, --help` | Print help message | — |
 
 ---
@@ -78,8 +96,23 @@ tvc \
     reference.fa \
     sample.bam \
     output.vcf
+```
+
+## Benchmarking TVC and other Taps+ materials 
+
+Please see how we calculate F1 scores and it's current performance on a demo data set in [this notebook](analysis/TVC_benchmarking.ipynb).
+
+We have other methylation based scripts in our [taps foundry](https://github.com/watchmaker-genomics/taps-foundry)
+
+You can view our analysis best practices documentation here.
+
+
 
 ## Development
+
+### Development requirements
+
+All pull requests to this repository are gated by the unit test passing, a format check with cargo fmt, and finally linting with cargo clippy.
 
 ### Git LFS Requirement
 
@@ -97,8 +130,6 @@ Before starting development, ensure Git LFS is installed on your system.
     ```bash
     sudo apt install git-lfs
     ```
-- **Windows:**
-    Download and run the installer from [https://git-lfs.com](https://git-lfs.com).
 
 #### Initialize Git LFS
 After installation, run:
@@ -109,8 +140,8 @@ git lfs install
 #### Pulling LFS Files
 When cloning the repository, make sure to fetch LFS files as well:
 ```bash
-git clone <repo_url>
-cd <repo_name>
+git clone git@github.com:watchmaker-genomics/TVC.git
+cd TVC
 git lfs pull
 ```
 
@@ -121,4 +152,3 @@ git lfs pull
 ```
 
 > **Note:** Development cannot proceed without Git LFS installed, as some large files required for the project are managed through LFS.
-
