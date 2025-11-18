@@ -76,6 +76,7 @@ tvc [OPTIONS] <INPUT_REF> <INPUT_BAM> <OUTPUT_VCF>
 1. **Context Awareness:**  
    Each site is evaluated with respect to its **CpG context**, allowing the model to distinguish true C→T mutations from transitions due to TAPS+ modification or background noise.
 
+
 2. **Noise Modeling:**  
    Observed alternate allele counts are tested against a **binomial distribution** parameterized by the estimated error rate default value of error is 0.005 and using an alpha of 0.05.  
    This step filters out unlikely allelic configurations arising purely from noise.
