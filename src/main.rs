@@ -66,6 +66,9 @@ struct Args {
 
     #[arg(short = 'r', long, value_enum, default_value_t = ReadNumber::R1)]
     stranded_read: ReadNumber,
+
+    #[arg(short = 'H', long, default_value_t = 3)]
+    homopolymer_cutoff: usize,
 }
 
 /// Representation of a genomic variant
@@ -644,8 +647,57 @@ fn is_stranded_read(record: &bam::Record, stranded_read: &ReadNumber) -> bool {
     read_orientation == *stranded_read
 }
 
+fn homopolymer_read_start(sequence: &[u8], homopolymer_cutoff: usize) -> bool {
+    let len = sequence.len();
+    if len < homopolymer_cutoff {
+        return false;
+    }
+    let first_base = sequence[0];
+    for i in 1..homopolymer_cutoff {
+        if sequence[i] != first_base {
+            return false;
+        }
+    }
+    true
+}
+
+
+fn homopolymer_read_end(sequence: &[u8], homopolymer_cutoff: usize) -> bool {
+    if sequence.len() < homopolymer_cutoff {
+        return false
+    }
+    let last_base = sequence[sequence.len() - 1];
+    for i in (sequence.len() - homopolymer_cutoff)..(sequence.len()) {
+        if sequence[i] != last_base {
+            return false;
+        }
+    }
+    true
+}
+
+fn dinuc_repeat_read_start(sequence: &[u8]) -> bool {
+    if sequence.len() < 4 {
+        return false;
+    }
+
+    let first_two = &sequence[0..2]; 
+
+    sequence[2..4] == *first_two
+}
+
+fn dinuc_repeat_read_end(sequence: &[u8]) -> bool {
+    if sequence.len() < 4 {
+        return false;
+    }
+    let start_index = sequence.len() - 4;
+    let end_index = sequence.len() - 2;
+
+    let last_two = &sequence[sequence.len() - 2..];
+
+    sequence[start_index..end_index] == *last_two
+}
+
 /// Extract base call counts from a pileup
-///
 /// # Arguments
 /// * `pileup` - The pileup to extract counts from
 /// * `min_bq` - Minimum base quality
@@ -691,6 +743,15 @@ fn extract_pileup_counts(
             let mapq = record.mapq();
             let is_del = alignment.is_del();
             let is_refskip = alignment.is_refskip();
+            let seq = record.seq().as_bytes();
+
+            if homopolymer_read_start(&seq, 3) || homopolymer_read_end(&seq, 3) {
+                continue;
+            }
+
+            if dinuc_repeat_read_start(&seq) || dinuc_repeat_read_end(&seq) {
+                continue;
+            }
 
             if is_del || is_refskip {
                 continue;
@@ -1381,4 +1442,72 @@ mod tests {
             filtered_variants.len()
         );
     }
+
+    #[test]
+    fn test_homopolymer_read_start() {
+
+        let seq = b"AAATGCC";
+        assert!(homopolymer_read_start(seq, 3));
+
+        let seq2 = b"AATGCC";
+        assert!(!homopolymer_read_start(seq2, 3));
+
+        let seq3 = b"ATATAT";
+        assert!(!homopolymer_read_start(seq3, 3));
+    }
+
+    #[test]
+    fn test_homopolymer_read_end() {
+
+        let seq = b"GCCTTT";
+        assert!(homopolymer_read_end(seq, 3));
+
+        let seq2 = b"GCCTT";
+        assert!(!homopolymer_read_end(seq2, 3));
+
+        let seq3 = b"GCCTTA";
+        assert!(!homopolymer_read_end(seq3, 3));
+    }
+
+    #[test]
+    fn test_dinuc_repeat_read_start() {
+
+        let seq = b"ATATGC";
+        assert!(dinuc_repeat_read_start(seq));
+
+        let seq2 = b"TGTGAA";
+        assert!(dinuc_repeat_read_start(seq2));
+
+        let seq3 = b"ATCGTG";
+        assert!(!dinuc_repeat_read_start(seq3));
+
+        let seq4 = b"ATG";
+        assert!(!dinuc_repeat_read_start(seq4));
+    }
+
+    #[test]
+    fn test_dinuc_repeat_read_end() {
+
+        let seq = b"GCCGCG";
+        assert!(dinuc_repeat_read_end(seq));
+
+        let seq2 = b"ATTTTT";
+        assert!(dinuc_repeat_read_end(seq2));
+
+        let seq3 = b"GGATCC";
+        assert!(!dinuc_repeat_read_end(seq3));
+
+        let seq4 = b"ATG";
+        assert!(!dinuc_repeat_read_end(seq4));
+    }
+
+    #[test]
+    fn test_filters_do_not_trigger_falsely() {
+        let seq = b"ATGCGT";
+        assert!(!homopolymer_read_start(seq, 3));
+        assert!(!homopolymer_read_end(seq, 3));
+        assert!(!dinuc_repeat_read_start(seq));
+        assert!(!dinuc_repeat_read_end(seq));
+    }
+
 }
