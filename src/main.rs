@@ -752,18 +752,6 @@ fn extract_pileup_counts(
             let is_refskip = alignment.is_refskip();
             let seq = record.seq().as_bytes();
 
-            if homopolymer_read_start(&seq, 3) || homopolymer_read_end(&seq, 3) {
-                continue;
-            }
-
-            if dinuc_repeat_read_start(&seq) || dinuc_repeat_read_end(&seq) {
-                continue;
-            }
-
-            if check_soft_clip(&record) {
-                continue;
-            }
-
             if is_del || is_refskip {
                 continue;
             }
@@ -785,13 +773,27 @@ fn extract_pileup_counts(
             let base_call = BaseCall::new(&alignment, ref_seq, ref_pos);
 
             let read_len = record.seq().len();
+
             if base_call.is_snp() {
                 if qpos < end_of_read_cutoff || qpos >= read_len - end_of_read_cutoff {
                     continue;
                 }
-            } else if qpos < indel_end_of_read_cutoff || qpos >= read_len - indel_end_of_read_cutoff
-            {
-                continue;
+            } else {
+                if qpos < indel_end_of_read_cutoff || qpos >= read_len - indel_end_of_read_cutoff {
+                    continue;
+                }
+
+                if homopolymer_read_start(&seq, 3) || homopolymer_read_end(&seq, 3) {
+                    continue;
+                }
+
+                if dinuc_repeat_read_start(&seq) || dinuc_repeat_read_end(&seq) {
+                    continue;
+                }
+
+                if check_soft_clip(&record) {
+                    continue;
+                }
             }
 
             let is_stranded_read_status = is_stranded_read(&record, stranded_read);
