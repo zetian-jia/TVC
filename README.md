@@ -166,7 +166,7 @@ This project is licensed under the LGPL 3.0 License.
 
 - **Research Use Only**: This code is provided for research and development purposes. It is not validated for diagnostic or clinical use, and Watchmaker Genomics makes no representations about regulatory compliance.
 - **No Warranty**: Use of this code is at your own risk. Watchmaker Genomics shall not be liable for any claims or damages arising from its use.
-- **Contributions**: If you contribute code, you agree that your contributions will be licensed under the same MIT License.
+- **Contributions**: If you contribute code, you agree that your contributions will be licensed under the same LGPL 3.0 License.
 
 By making a contribution to this project, I certify that:
 
