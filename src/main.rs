@@ -305,32 +305,6 @@ impl BaseCall {
         }
     }
 
-    /// Get the reference allele string
-    ///
-    /// # Returns
-    /// A string representing the reference allele
-    // fn get_reference_allele(&self) -> String {
-    //     let mut ref_allele = String::new();
-    //     ref_allele.push(self.ref_base);
-    //     if !self.deleted_bases.is_empty() {
-    //         ref_allele.push_str(&String::from_utf8_lossy(&self.deleted_bases));
-    //     }
-    //     ref_allele
-    // }
-
-    /// Get the alternate allele string
-    ///
-    /// # Returns
-    /// A string representing the alternate allele
-    fn get_alternate_allele(&self) -> String {
-        let mut alt_allele = String::new();
-        alt_allele.push(self.base);
-        if !self.insertion_bases.is_empty() {
-            alt_allele.push_str(&String::from_utf8_lossy(&self.insertion_bases));
-        }
-        alt_allele
-    }
-
     /// Check if the BaseCall represents a SNP
     /// # Returns
     /// True if SNP, false otherwise
@@ -344,12 +318,6 @@ enum VariantObservation {
     Snp { base: char, ref_base: char, deleted_bases: Vec<u8>, insertion_bases: Vec<u8> },
     Insertion { base: char, ref_base: char, deleted_bases: Vec<u8>, insertion_bases: Vec<u8> },
     Deletion { base: char, ref_base: char, deleted_bases: Vec<u8>, insertion_bases: Vec<u8>  },
-}
-
-impl VariantObservation {
-    fn is_snp(&self) -> bool {
-        matches!(self, VariantObservation::Snp { .. })
-    }
 }
 
 impl From<&BaseCall> for VariantObservation {
@@ -379,7 +347,7 @@ impl From<&BaseCall> for VariantObservation {
     }
 }
 impl VariantObservation {
-    pub fn get_reference_allele(&self) -> String {
+    fn get_reference_allele(&self) -> String {
         let mut ref_allele = String::new();
 
         match self {
@@ -391,7 +359,7 @@ impl VariantObservation {
             },
             VariantObservation::Insertion { ref_base, deleted_bases, .. }
             | VariantObservation::Deletion { ref_base, deleted_bases, .. } => {
-                ref_allele.push(*ref_base); // Deref to get the value of ref_base
+                ref_allele.push(*ref_base); 
                 if !deleted_bases.is_empty() {
                     ref_allele.push_str(&String::from_utf8_lossy(deleted_bases));
                 }
@@ -401,14 +369,19 @@ impl VariantObservation {
         ref_allele
     }
 
-    pub fn get_alternate_allele(&self) -> String {
+    fn get_alternate_allele(&self) -> String {
         let mut alt_allele = String::new();
 
         match self {
             VariantObservation::Snp { base, .. }
-            | VariantObservation::Insertion { base, .. }
             | VariantObservation::Deletion { base, .. } => {
                 alt_allele.push(*base); // Deref to get the value of base
+            }
+            VariantObservation::Insertion { base, insertion_bases, .. } => {
+                alt_allele.push(*base); // Deref to get the value of base
+                if !insertion_bases.is_empty() {
+                    alt_allele.push_str(&String::from_utf8_lossy(insertion_bases));
+                }
             }
         }
 
@@ -576,7 +549,10 @@ fn find_where_to_call_variants(
     let alt_candidate_bases: HashSet<char> = alt_candidates.iter().filter_map(|vo| match vo {
         VariantObservation::Snp { base, .. }
         | VariantObservation::Insertion { base, .. }
-        | VariantObservation::Deletion { base, .. } => Some(*base), // Extract base from each variant
+        | VariantObservation::Deletion { base, .. } => {
+            println!("FIND_WHERE_TO_CALL_VARIANTS Alt Candidate Base: {}", base);
+            Some(*base)
+        }
 
         // You can add additional pattern matching here if needed for other variants
     }).collect();
@@ -663,22 +639,16 @@ fn get_count_vec_candidates(
     for (variant, &count) in counts.iter() {
         // Skip if the base is the same as the reference base (for SNPs) or if it's 'N'
         match variant {
-            VariantObservation::Snp { base, ref_base: _, deleted_bases: _, insertion_bases: _ } 
-                if *base == ref_base => continue, 
+            VariantObservation::Snp { base, ref_base, deleted_bases: _, insertion_bases: _ } 
+                if *base == *ref_base => continue, 
 
             VariantObservation::Snp { base, ref_base: _, deleted_bases: _, insertion_bases: _ } 
                 if *base == 'N' => continue,
 
-            VariantObservation::Insertion { base, ref_base, deleted_bases: _, insertion_bases: _ } 
-                if *base == *ref_base => continue,
-
-            VariantObservation::Insertion { base, ref_base, deleted_bases: _, insertion_bases: _ } 
+            VariantObservation::Insertion { base, ref_base: _, deleted_bases: _, insertion_bases: _ } 
                 if *base == 'N' => continue, 
 
-            VariantObservation::Deletion { base, ref_base, deleted_bases: _, insertion_bases: _ } 
-                if *base == *ref_base => continue, 
-
-            VariantObservation::Deletion { base, ref_base, deleted_bases: _, insertion_bases: _ } 
+            VariantObservation::Deletion { base, ref_base: _, deleted_bases: _, insertion_bases: _ } 
                 if *base == 'N' => continue, 
 
             _ => {} 
@@ -906,15 +876,16 @@ fn extract_pileup_counts(
                     || qpos >= read_len - end_of_read_cutoff {
                     continue;
                 }
-            } else {
-                if qpos < indel_end_of_read_cutoff
-                    || qpos >= read_len - indel_end_of_read_cutoff {
-                    continue;
-                }
+            } else if qpos < indel_end_of_read_cutoff || qpos >= read_len - indel_end_of_read_cutoff
+            {
+                continue;
             }
 
             // convert to a hashable variant type
             let obs = VariantObservation::from(&base_call);
+            if !base_call.is_snp() {
+                println!("EXTR_PILEUP_COUNTS Observation: {:?}", obs.clone());
+            }
 
             // strand handling
             let is_stranded = is_stranded_read(&record, stranded_read);
@@ -935,6 +906,10 @@ fn extract_pileup_counts(
             counts.total.entry(obs)
                 .and_modify(|c| *c += 1)
                 .or_insert(1);
+            
+            if !base_call.is_snp() {
+                println!("EXTR_PILEUP_COUNTS Counts Total: {:?}", counts.total);
+            }
         }
     }
 
@@ -1154,6 +1129,7 @@ fn call_variants(
                 VariantObservation::Insertion { .. } |
                 VariantObservation::Deletion  { .. } => {
                     r_one_f_counts_indels.insert(obs.clone(), *count);
+                    println!("CALL_VARIANTS Forward INDEL counts: {:?}", r_one_f_counts_indels.clone());
                 }
             }
         }
@@ -1166,6 +1142,7 @@ fn call_variants(
                 VariantObservation::Insertion { .. } |
                 VariantObservation::Deletion  { .. } => {
                     r_one_r_counts_indels.insert(obs.clone(), *count);
+                    println!("CALL_VARIANTS Reverse INDEL counts: {:?}", r_one_r_counts_indels.clone());
                 }
             }
         }
@@ -1180,6 +1157,7 @@ fn call_variants(
                 VariantObservation::Insertion { .. } |
                 VariantObservation::Deletion  { .. } => {
                     total_counts_indels.insert(obs.clone(), *count);
+                    println!("CALL_VARIANTS Total INDEL counts: {:?}", total_counts_indels.clone());
                 }
             }
         }
@@ -1276,13 +1254,14 @@ fn call_variants(
             }
         }
         let total_depth_indels = counts_indels.values().sum::<usize>() as u64;
+        let total_depth = total_depth_snps + total_depth_indels;
         if !candidate_indels.is_empty() && total_depth_indels >= min_depth as u64 {
             for candidate in candidate_indels {
                 let alt_counts = counts_indels.get(&candidate).unwrap_or(&0);
                 if *alt_counts < min_ao as usize {
                     continue;
                 }
-                let genotype = assign_genotype(*alt_counts, total_depth_indels as usize, error_rate);
+                let genotype = assign_genotype(*alt_counts, total_depth as usize, error_rate);
                 if genotype.genotype == "0/0" {
                     continue;
                 }
@@ -1294,10 +1273,14 @@ fn call_variants(
                     candidate.get_alternate_allele(),
                     genotype.genotype,
                     genotype.score,
-                    total_depth_indels as u32,
+                    total_depth as u32,
                     *alt_counts as u32,
                     directive_indels.clone(),
                 );
+                
+                println!("CALL_VARIANTS Detected INDEL Variant: {:?}", variant);
+                let total_depth = total_depth_snps + total_depth_indels;
+                println!("CALL_VARIANTS Total Depth at position {}: {}", pos + 1, total_depth);
                 variants.push(variant);
             }
         }
@@ -1398,6 +1381,10 @@ mod tests {
                 )
                 .expect("call_variants failed");
 
+                if variants.is_empty() {
+                    panic!("No variants called");
+                }
+
                 let matching_variant = variants
                     .iter()
                     .find(|v| v.pos == $pos)
@@ -1407,6 +1394,14 @@ mod tests {
                 assert_eq!(matching_variant.reference, $ref_base, "REF mismatch");
                 assert_eq!(matching_variant.alt, $alt_base, "ALT mismatch");
                 assert_eq!(matching_variant.genotype, $gt, "GT mismatch");
+                println!(
+                    "Test {} passed: Found variant at position {} with REF {}, ALT {}, GT {}",
+                    stringify!($fn_name),
+                    matching_variant.pos,
+                    matching_variant.reference,
+                    matching_variant.alt,
+                    matching_variant.genotype
+                )
             }
         };
     }
@@ -1451,6 +1446,16 @@ mod tests {
         134911365,
         "T",
         "C",
+        "0/1",
+        (ReadNumber::R1)
+    );
+
+    make_variant_test!(
+        test_indel,
+        "chr11:1160400-1160500_indel2_sorted.bam",
+        1160456,
+        "AC",
+        "A",
         "0/1",
         (ReadNumber::R1)
     );
@@ -1625,8 +1630,7 @@ mod tests {
         let test_bam = "test_assets/testing_bams/methylation_site_chr11_134755601_134755621.bam";
         // Load reference
         let ref_reader = faidx::Reader::from_path(test_ref).expect(
-            "Failed to
-    open FASTA",
+            "Failed to open FASTA",
         );
         let contig = "chr11";
         let seq_len = ref_reader.fetch_seq_len(contig);
@@ -1665,6 +1669,8 @@ mod tests {
             filtered_variants.len()
         );
     }
+}
+
 
     // #[test]
     // fn test_homopolymer_read_start() {
@@ -1748,4 +1754,4 @@ mod tests {
     //     record_no_soft_clip.set(qname, Some(&cigar_no_soft_clip), seq, &qual);
     //     assert!(!filter_indels(&record_no_soft_clip));
     // }
-}
+
