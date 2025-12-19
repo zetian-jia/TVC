@@ -863,6 +863,7 @@ fn extract_pileup_counts(
             }
 
             let base_call = BaseCall::new(&alignment, ref_seq, ref_pos);
+
             if base_call.is_indel && base_call.indel_filter {
                 continue;
             }
@@ -1218,13 +1219,15 @@ fn call_variants(
         };
 
         let total_depth_snps = counts_snps.values().sum::<usize>() as u64;
+        let total_depth_indels = counts_indels.values().sum::<usize>() as u64;
+        let total_depth = total_depth_snps + total_depth_indels;
         if !candidate_snps.is_empty() && total_depth_snps >= min_depth as u64 {
             for candidate in candidate_snps {
                 let alt_counts = counts_snps.get(&candidate).unwrap_or(&0);
                 if *alt_counts < min_ao as usize {
                     continue;
                 }
-                let genotype = assign_genotype(*alt_counts, total_depth_snps as usize, error_rate);
+                let genotype = assign_genotype(*alt_counts, total_depth as usize, error_rate);
                 if genotype.genotype == "0/0" {
                     continue;
                 }
@@ -1236,15 +1239,14 @@ fn call_variants(
                     candidate.get_alternate_allele(),
                     genotype.genotype,
                     genotype.score,
-                    total_depth_snps as u32,
+                    total_depth as u32,
                     *alt_counts as u32,
                     directive_snps.clone(),
                 );
                 variants.push(variant);
             }
         }
-        let total_depth_indels = counts_indels.values().sum::<usize>() as u64;
-        let total_depth = total_depth_snps + total_depth_indels;
+
         if !candidate_indels.is_empty() && total_depth_indels >= min_depth as u64 {
             for candidate in candidate_indels {
                 let alt_counts = counts_indels.get(&candidate).unwrap_or(&0);
@@ -1268,7 +1270,6 @@ fn call_variants(
                     directive_indels.clone(),
                 );
                 
-                let total_depth = total_depth_snps + total_depth_indels;
                 variants.push(variant);
             }
         }
@@ -1439,12 +1440,42 @@ mod tests {
     );
 
     make_variant_test!(
-        test_indel,
+        test_short_hetero_del,
         "chr11:1160400-1160500_indel2_sorted.bam",
         1160456,
         "AC",
         "A",
         "0/1",
+        (ReadNumber::R1)
+    );
+
+    make_variant_test!(
+        test_long_ins_hetero,
+        "chr11:228150-228350_long_ins_hetero.bam",
+        228244,
+        "C",
+        "CA",
+        "0/1",
+        (ReadNumber::R1)
+    );
+
+    make_variant_test!(
+        test_short_insertion_homo,
+        "chr11:6586900-6587100_short_ins_homo.bam",
+        6586999,
+        "T",
+        "TG",
+        "1/1",
+        (ReadNumber::R1)
+    );
+
+    make_variant_test!(
+        test_long_ins_homo,
+        "chr11:5888900-5889100_long_ins_homo.bam",
+        5889008,
+        "C",
+        "CTAGAG",
+        "1/1",
         (ReadNumber::R1)
     );
 
@@ -1659,87 +1690,144 @@ mod tests {
     }
 }
 
+    #[derive(Debug)]
+    struct Qualities(Vec<u8>);
+    impl Qualities {
+        fn from_bytes(bytes: Vec<u8>) -> Self {
+            Qualities(bytes)
+        }
+    }
 
-    // #[test]
-    // fn test_homopolymer_read_start() {
+    #[test]
+    fn test_homopolymer_read_start() {
+        let mut record_with_homopolymer= bam::Record::new();
+        let cigar = bam::record::CigarString::from(vec![
+            Cigar::Match(7),
+        ]);
+        let qname = b"simulated_read";
+        let seq = b"AAATGCC";
+        let quals = Qualities::from_bytes(vec![255; 7]);
+        let qual: Vec<u8> = quals.0;
+        record_with_homopolymer.set(qname, Some(&cigar), seq, &qual);
+        assert!(filter_indels(seq, &record_with_homopolymer, 3));
 
-    //     let seq = b"AAATGCC";
-    //     assert!(filter_indels(seq, 3));
+        let mut record_without_homopolymer= bam::Record::new();
+        let cigar2 = bam::record::CigarString::from(vec![
+            Cigar::Match(7),
+        ]);
+        
+        let qname2 = b"simulated_read";
+        let seq2 = b"AATGCC";
+        let quals2 = Qualities::from_bytes(vec![255; 6]);
+        let qual2: Vec<u8> = quals2.0;
+        record_without_homopolymer.set(qname2, Some(&cigar2), seq2, &qual2);
 
-    //     let seq2 = b"AATGCC";
-    //     assert!(!filter_indels(seq2, 3));
+        assert!(filter_indels(seq, &record_with_homopolymer, 3));
+        assert!(!filter_indels(seq2, &record_without_homopolymer, 3));
+    }
 
-    // }
 
-    // #[test]
-    // fn test_homopolymer_read_end() {
+    #[test]
+    fn test_homopolymer_read_end() {
+        let mut record_with_homopolymer= bam::Record::new();
+        let cigar = bam::record::CigarString::from(vec![
+            Cigar::Match(6),
+        ]);
+        let qname = b"simulated_read";
+        let seq = b"GCCTTT";
+        let quals = Qualities::from_bytes(vec![255; 6]);
+        let qual: Vec<u8> = quals.0;
+        record_with_homopolymer.set(qname, Some(&cigar), seq, &qual);
+        assert!(filter_indels(seq, &record_with_homopolymer, 3));
 
-    //     let seq = b"GCCTTT";
-    //     assert!(filter_indels(seq, 3));
+        let mut record_without_homopolymer= bam::Record::new();
+        let cigar2 = bam::record::CigarString::from(vec![
+            Cigar::Match(6),
+        ]);
+        
+        let qname2 = b"simulated_read";
+        let seq2 = b"GCCTT";
+        let quals2 = Qualities::from_bytes(vec![255; 5]);
+        let qual2: Vec<u8> = quals2.0;
+        record_without_homopolymer.set(qname2, Some(&cigar2), seq2, &qual2);
 
-    //     let seq2 = b"GCCTT";
-    //     assert!(!filter_indels(seq2, 3));
+        assert!(filter_indels(seq, &record_with_homopolymer, 3));
+        assert!(!filter_indels(seq2, &record_without_homopolymer, 3));
+    }
 
-    // }
+    #[test]
+    fn test_dinucleotide_read_start() {
+        let mut record_with_dinucleotide= bam::Record::new();
+        let cigar = bam::record::CigarString::from(vec![
+            Cigar::Match(6),
+        ]);
+        let qname = b"simulated_read";
+        let seq = b"ATATGC";
+        let quals = Qualities::from_bytes(vec![255; 6]);
+        let qual: Vec<u8> = quals.0;
+        record_with_dinucleotide.set(qname, Some(&cigar), seq, &qual);
+        assert!(filter_indels(seq, &record_with_dinucleotide, 3));
+        let mut record_without_dinucleotide= bam::Record::new();
+        let cigar2 = bam::record::CigarString::from(vec![
+            Cigar::Match(6),
+        ]);
+        
+        let qname2 = b"simulated_read";
+        let seq2 = b"ATCGTG";
+        let quals2 = Qualities::from_bytes(vec![255; 6]);
+        let qual2: Vec<u8> = quals2.0;
+        record_without_dinucleotide.set(qname2, Some(&cigar2), seq2, &qual2);
 
-    // #[test]
-    // fn test_dinuc_repeat_read_start() {
+        assert!(filter_indels(seq, &record_with_dinucleotide, 3));
+        assert!(!filter_indels(seq2, &record_without_dinucleotide, 3));
+    }
 
-    //     let seq = b"ATATGC";
-    //     assert!(filter_indels(seq));
+    #[test]
+    fn test_dinucleotide_read_end() {
+        let mut record_with_dinucleotide= bam::Record::new();
+        let cigar = bam::record::CigarString::from(vec![
+            Cigar::Match(6),
+        ]);
+        let qname = b"simulated_read";
+        let seq = b"GCCTTT";
+        let quals = Qualities::from_bytes(vec![255; 6]);
+        let qual: Vec<u8> = quals.0;
+        record_with_dinucleotide.set(qname, Some(&cigar), seq, &qual);
+        assert!(filter_indels(seq, &record_with_dinucleotide, 3));
+        let mut record_without_dinucleotide= bam::Record::new();
+        let cigar2 = bam::record::CigarString::from(vec![
+            Cigar::Match(6),
+        ]);
+        
+        let qname2 = b"simulated_read";
+        let seq2 = b"GCCTTG";
+        let quals2 = Qualities::from_bytes(vec![255; 6]);
+        let qual2: Vec<u8> = quals2.0;
+        record_without_dinucleotide.set(qname2, Some(&cigar2), seq2, &qual2);
 
-    //     let seq2 = b"ATCGTG";
-    //     assert!(!filter_indels(seq2));
+        assert!(filter_indels(seq, &record_with_dinucleotide, 3));
+        assert!(!filter_indels(seq2, &record_without_dinucleotide, 3));
+    }
 
-    // }
+    #[test]
+    fn test_check_soft_clip() {
+        let mut record = bam::Record::new();
+        let cigar_with_soft_clip = bam::record::CigarString::from(vec![
+            Cigar::SoftClip(5),
+            Cigar::Match(10),
+            Cigar::SoftClip(3),
+        ]);
+        let qname = b"simulated_read";
+        let seq = b"ACGTACGTAC";
+        let quals = Qualities::from_bytes(vec![255; 10]);
+        let qual: Vec<u8> = quals.0;
+        record.set(qname, Some(&cigar_with_soft_clip), seq, &qual);
+        assert!(filter_indels(seq, &record, 3));
 
-    // #[test]
-    // fn test_dinuc_repeat_read_end() {
-
-    //     let seq = b"GCCGCG";
-    //     assert!(filter_indels(seq));
-
-    //     let seq2 = b"GGATCC";
-    //     assert!(!filter_indels(seq2));
-
-    // }
-
-    // #[test]
-    // fn test_short_sequence_no_filter() {
-
-    //     let seq = b"ACG";
-    //     assert!(!filter_indels(seq, 3));
-
-    // }
-    
-    // #[derive(Debug)]
-    // struct Qualities(Vec<u8>);
-    // impl Qualities {
-    //     fn from_bytes(bytes: Vec<u8>) -> Self {
-    //         Qualities(bytes)
-    //     }
-    // }
-
-    // #[test]
-    // fn test_check_soft_clip() {
-    //     let mut record = bam::Record::new();
-    //     let cigar_with_soft_clip = bam::record::CigarString::from(vec![
-    //         Cigar::SoftClip(5),
-    //         Cigar::Match(10),
-    //         Cigar::SoftClip(3),
-    //     ]);
-    //     let qname = b"simulated_read";
-    //     let seq = b"AAAAAAAAAA";
-    //     let quals = Qualities::from_bytes(vec![255; 10]);
-    //     let qual: Vec<u8> = quals.0;
-    //     record.set(qname, Some(&cigar_with_soft_clip), seq, &qual);
-    //     assert!(filter_indels(&record));
-
-    //     let mut record_no_soft_clip = bam::Record::new();
-    //     let cigar_no_soft_clip = bam::record::CigarString::from(vec![
-    //         Cigar::Match(10),
-    //     ]);
-    //     record_no_soft_clip.set(qname, Some(&cigar_no_soft_clip), seq, &qual);
-    //     assert!(!filter_indels(&record_no_soft_clip));
-    // }
-
+        let mut record_no_soft_clip = bam::Record::new();
+        let cigar_no_soft_clip = bam::record::CigarString::from(vec![
+            Cigar::Match(10),
+        ]);
+        record_no_soft_clip.set(qname, Some(&cigar_no_soft_clip), seq, &qual);
+        assert!(!filter_indels(seq, &record_no_soft_clip, 3));
+    }
