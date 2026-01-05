@@ -1098,12 +1098,8 @@ fn call_variants(
                 total_counts_snps.clone(),
             ),
         };
-        let directive_indels = find_where_to_call_variants(
-            ref_base as char,
-            &r_one_f_candidates_indels,
-            upstream_base as char,
-            downstream_base as char,
-        );
+        
+        let directive_indels = CallingDirective::BothStrands;
 
         let (candidate_indels, counts_indels): (HashSet<VariantObservation>, HashMap<VariantObservation, usize>) = match directive_indels {
             CallingDirective::ReferenceSiteOb | CallingDirective::DenovoSiteOb => {
