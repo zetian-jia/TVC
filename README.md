@@ -1,6 +1,6 @@
 # TAPS+ Variant Caller (TVC)
 
-**TVC** is a germline variant caller purpose-built for **TAPS+ (TET-assisted pyridine borane sequencing)** data. It is **CpG-aware**, **read-oriented**, and designed to factor out subtle methylation-induced patterns in order to avoid overcalling noise.
+**TVC** is a germline variant caller purpose-built for **TAPS+** data. It is **CpG-aware**, **read-oriented**, and designed to factor out subtle methylation-induced patterns in order to avoid overcalling noise.
 
 TVC performs variant calling while accounting for **CpG context** — both in the reference genome and in the observed read data. The algorithm models general noise using a **binomial distribution**, then estimates the most likely genotype (homozygous reference, heterozygous, or homozygous alternate) given observed allele counts and error rate parameters. This is inspired by the algorithm for determining genotypes in CpG that is used in [Rastair](https://bitbucket.org/bsblabludwig/rastair/src/master/) which was developed Benjamin Schuster-Böckler's lab at the University of Oxford, Ludwig Institute for Cancer Research.
 
@@ -67,6 +67,7 @@ tvc [OPTIONS] <INPUT_REF> <INPUT_BAM> <OUTPUT_VCF>
 | `-c, --chunk-size <CHUNK_SIZE>` | Number of reference bases processed per thread batch | `1,000,000` |
 | `-p, --error-rate <ERROR_RATE>` | Estimated per-base sequencing error rate used for binomial modeling | `0.005` |
 | `-r, --stranded_read <READ_NUMBER>` | The read that is in the same orientation of the molecule (r1/r2) | `r1`|
+| `-l, --log-level <LOG_LEVEL>`| The desired level of logging can be [error, warn, info, debug, trace]| `info`|
 | `-h, --help` | Print help message | — |
 
 ---
@@ -106,9 +107,6 @@ tvc \
 Please see how we calculate F1 scores and it's current performance on a demo data set in [this notebook](analysis/TVC_benchmarking.ipynb).
 
 We have other methylation based scripts in our [taps foundry](https://github.com/watchmaker-genomics/taps-foundry)
-
-You can view our analysis best practices documentation here.
-
 
 
 ## Development
@@ -155,3 +153,23 @@ git lfs pull
 ```
 
 > **Note:** Development cannot proceed without Git LFS installed, as some large files required for the project are managed through LFS.
+
+# License and Use
+This project is licensed under the LGPL 3.0 License.
+
+- Attribution is required: please retain the copyright notice and license in any redistributed versions or substantial portions of this software.
+- All software is provided “AS IS”, without warranties or conditions of any kind.
+
+## Important Notes
+
+- **Research Use Only**: This code is provided for research and development purposes. It is not validated for diagnostic or clinical use, and Watchmaker Genomics makes no representations about regulatory compliance.
+- **No Warranty**: Use of this code is at your own risk. Watchmaker Genomics shall not be liable for any claims or damages arising from its use.
+- **Contributions**: If you contribute code, you agree that your contributions will be licensed under the same LGPL 3.0 License.
+
+By making a contribution to this project, I certify that:
+
+(a) The contribution was created by me and I have the right to submit it under the LGPL 3.0 License; or 
+(b) The contribution is based upon previous work that is covered by the LGPL 3.0 License and I have the right to submit it under the same license; or 
+(c) The contribution was provided to me by someone who certified (a) or (b).
+
+I understand and agree that this project and the contribution are public and that a record of the contribution (including my name and email) is maintained indefinitely.
