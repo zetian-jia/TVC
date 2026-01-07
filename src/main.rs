@@ -974,11 +974,6 @@ fn extract_pileup_counts(
                 .and_modify(|c| *c += 1)
                 .or_insert(1);
             
-            if !base_call.is_snp() {
-                println!("Position is: {}", ref_pos);
-                println!("total counts: {:?}", counts.total);
-            }
-            
         }
     }
 
@@ -1464,14 +1459,7 @@ mod tests {
                 assert_eq!(matching_variant.reference, $ref_base, "REF mismatch");
                 assert_eq!(matching_variant.alt, $alt_base, "ALT mismatch");
                 assert_eq!(matching_variant.genotype, $gt, "GT mismatch");
-                // println!(
-                //     "Test {} passed: Found variant at position {} with REF {}, ALT {}, GT {}",
-                //     stringify!($fn_name),
-                //     matching_variant.pos,
-                //     matching_variant.reference,
-                //     matching_variant.alt,
-                //     matching_variant.genotype
-                // )
+                
             }
         };
     }
