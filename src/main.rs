@@ -567,11 +567,10 @@ fn validate_fai_and_bam(
 /// A CallingDirective indicating where to call variants
 fn find_where_to_call_variants(
     ref_base: char,
-    alt_candidates: &HashSet<VariantObservation>, // Now working with VariantObservation
+    alt_candidates: &HashSet<VariantObservation>,
     upstream_base: char,
     downstream_base: char,
 ) -> CallingDirective {
-    // Collect bases from VariantObservation
     let alt_candidate_bases: HashSet<char> = alt_candidates.iter().filter_map(|vo| match vo {
         VariantObservation::Snp { base, .. }
         | VariantObservation::Insertion { base, .. }
@@ -658,8 +657,6 @@ fn get_count_vec_candidates(
 
             _ => {} 
         }
-
-        // Calculate p-value for determining if the variant is significant
 
         candidates.insert(variant.clone());
     }
@@ -897,10 +894,8 @@ fn extract_pileup_counts(
                 continue;
             }
 
-            // convert to a hashable variant type
             let obs = VariantObservation::from(&base_call);
 
-            // strand handling
             let is_stranded = is_stranded_read(&record, stranded_read);
             let is_rev_strand = (record.is_reverse() && is_stranded)
                 || (!record.is_reverse() && !is_stranded);
@@ -915,7 +910,6 @@ fn extract_pileup_counts(
                     .or_insert(1);
             }
 
-            // total count
             counts.total.entry(obs.clone())
                 .and_modify(|c| *c += 1)
                 .or_insert(1);
@@ -1122,7 +1116,7 @@ fn call_variants(
         let ref_base = ref_seq[pos as usize];
 
         let depth = pileup.depth();
-        if depth == 0 {
+        if depth < min_depth {
             continue;
         }
         let counts = extract_pileup_counts(
@@ -1221,24 +1215,14 @@ fn call_variants(
                 total_counts_snps.clone(),
             ),
         };
-        // Hardcoded to BothStrands for indels for now
-        let directive_indels = CallingDirective::BothStrands;
-
-        let (candidate_indels, counts_indels): (HashSet<VariantObservation>, HashMap<VariantObservation, usize>) = match directive_indels {
-            CallingDirective::ReferenceSiteOb | CallingDirective::DenovoSiteOb => {
-                (r_one_r_candidates_indels.clone(), r_one_r_counts_indels.clone())
-            }
-            CallingDirective::ReferenceSiteOt | CallingDirective::DenovoSiteOt => {
-                (r_one_f_candidates_indels.clone(), r_one_f_counts_indels.clone())
-            }
-            CallingDirective::BothStrands => (
+        
+        let (candidate_indels, counts_indels): (HashSet<VariantObservation>, HashMap<VariantObservation, usize>) = (
                 r_one_f_candidates_indels
                     .intersection(&r_one_r_candidates_indels)
                     .cloned()
                     .collect(),
                 total_counts_indels.clone(),
-            ),
-        };
+        );
 
         let total_depth_snps = counts_snps.values().sum::<usize>() as u64;
         let total_depth_indels = counts_indels.values().sum::<usize>() as u64;
@@ -1249,6 +1233,8 @@ fn call_variants(
         } else {
             0
         };
+
+        let directive_indels = CallingDirective::BothStrands;
         if !candidate_snps.is_empty() && total_depth_snps >= min_depth as u64 {
             for candidate in candidate_snps {
                 let alt_counts = counts_snps.get(&candidate).unwrap_or(&0);
@@ -1736,6 +1722,7 @@ mod tests {
 
     #[test]
     fn test_homopolymer_read_start() {
+        // Tests the indel filtering function for homopolymers at the start of reads
         let mut record_with_homopolymer= bam::Record::new();
         let cigar = bam::record::CigarString::from(vec![
             Cigar::Match(7),
@@ -1765,6 +1752,7 @@ mod tests {
 
     #[test]
     fn test_homopolymer_read_end() {
+        // Tests the indel filtering function for homopolymers at the end of reads
         let mut record_with_homopolymer= bam::Record::new();
         let cigar = bam::record::CigarString::from(vec![
             Cigar::Match(6),
@@ -1793,6 +1781,7 @@ mod tests {
 
     #[test]
     fn test_dinucleotide_read_start() {
+        // Tests the indel filtering function for dinucleotides at the start of reads
         let mut record_with_dinucleotide= bam::Record::new();
         let cigar = bam::record::CigarString::from(vec![
             Cigar::Match(6),
@@ -1820,6 +1809,7 @@ mod tests {
 
     #[test]
     fn test_dinucleotide_read_end() {
+        // Tests the indel filtering function for dinucleotides at the end of reads
         let mut record_with_dinucleotide= bam::Record::new();
         let cigar = bam::record::CigarString::from(vec![
             Cigar::Match(6),
@@ -1847,6 +1837,7 @@ mod tests {
 
     #[test]
     fn test_check_soft_clip() {
+        // Tests the indel filtering function for soft-clipped reads
         let mut record = bam::Record::new();
         let cigar_with_soft_clip = bam::record::CigarString::from(vec![
             Cigar::SoftClip(5),
