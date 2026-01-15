@@ -327,10 +327,10 @@ impl BaseCall {
         }
     }
 
-    /// Check if the BaseCall represents a SNP
+    /// Check if the BaseCall is not an indel
     /// # Returns
-    /// True if SNP, false otherwise
-    fn is_snp(&self) -> bool {
+    /// True if not an indel, false otherwise
+    fn is_not_indel(&self) -> bool {
         self.insertion_bases.is_empty() && self.deleted_bases.is_empty()
     }
 }
@@ -885,7 +885,7 @@ fn extract_pileup_counts(
 
             let read_len = record.seq().len();
 
-            if base_call.is_snp() {
+            if base_call.is_not_indel() {
                 if qpos < end_of_read_cutoff || qpos >= read_len - end_of_read_cutoff {
                     continue;
                 }
@@ -914,7 +914,7 @@ fn extract_pileup_counts(
                 .and_modify(|c| *c += 1)
                 .or_insert(1);
 
-            if base_call.is_snp() && base_call.base == base_call.ref_base {
+            if base_call.is_not_indel() && base_call.base == base_call.ref_base {
                 let read_seq = record.seq().as_bytes();
                 if filter_indels(&read_seq, &record, 3) {
                     counts.indel_offset.entry(obs.clone())
@@ -1228,7 +1228,7 @@ fn call_variants(
         let total_depth_indels = counts_indels.values().sum::<usize>() as u64;
         let total_depth = total_depth_snps + total_depth_indels;
         let indel_offset = counts.indel_offset.values().sum::<usize>() as u64;
-        let total_depth_indel_adjusted = if total_depth > indel_offset {
+        let total_depth_filtered = if total_depth > indel_offset {
             total_depth - indel_offset
         } else {
             0
@@ -1267,7 +1267,7 @@ fn call_variants(
                 if *alt_counts < min_ao as usize {
                     continue;
                 }
-                let genotype = assign_genotype(*alt_counts, total_depth_indel_adjusted as usize, error_rate_indels);
+                let genotype = assign_genotype(*alt_counts, total_depth_filtered as usize, error_rate_indels);
                 if genotype.genotype == "0/0" {
                     continue;
                 }
@@ -1279,7 +1279,7 @@ fn call_variants(
                     candidate.get_alternate_allele(),
                     genotype.genotype,
                     genotype.score,
-                    total_depth_indel_adjusted as u32,
+                    total_depth_filtered as u32,
                     *alt_counts as u32,
                     directive_indels.clone(),
                 );
