@@ -89,6 +89,9 @@ struct Args {
     #[arg(short = 'p', long, default_value_t = 0.005)]
     error_rate: f64,
 
+    #[arg(short = 's', long, default_value_t = 0.05)]
+    error_rate_indels: f64,
+
     #[arg(short = 'r', long, value_enum, default_value_t = ReadNumber::R1)]
     stranded_read: ReadNumber,
 
@@ -664,7 +667,7 @@ fn get_count_vec_candidates(
     candidates
 }
 
-/// Assign genotype based on binomial probabilities for SNPs
+/// Assign genotype based on binomial probabilities
 ///
 /// # Arguments
 /// * `alt_counts` - Count of reads supporting the alternate allele
@@ -673,40 +676,7 @@ fn get_count_vec_candidates(
 ///
 /// # Returns
 /// A Genotype instance with assigned genotype and quality score
-fn assign_genotype_snps(alt_counts: usize, depth: usize, error_rate: f64) -> Genotype {
-    let homo_ref_prob = Binomial::new(error_rate, depth as u64)
-        .unwrap()
-        .pmf(alt_counts as u64);
-    let het_prob = Binomial::new(0.5, depth as u64)
-        .unwrap()
-        .pmf(alt_counts as u64);
-    let homo_alt_prob = Binomial::new(1.0 - error_rate, depth as u64)
-        .unwrap()
-        .pmf(alt_counts as u64);
-
-    let total = homo_ref_prob + het_prob + homo_alt_prob;
-
-    let (gt, best_prob) = if homo_ref_prob > het_prob && homo_ref_prob > homo_alt_prob {
-        ("0/0", homo_ref_prob)
-    } else if het_prob > homo_ref_prob && het_prob > homo_alt_prob {
-        ("0/1", het_prob)
-    } else {
-        ("1/1", homo_alt_prob)
-    };
-
-    Genotype::new(gt, best_prob, total)
-}
-
-/// Assign genotype based on binomial probabilities for Indels
-///
-/// # Arguments
-/// * `alt_counts` - Count of reads supporting the alternate allele
-/// * `depth` - Total read depth at the position
-/// * `error_rate` - Expected general error rate
-///
-/// # Returns
-/// A Genotype instance with assigned genotype and quality score
-fn assign_genotype_indels(alt_counts: usize, depth: usize, error_rate: f64) -> Genotype {
+fn assign_genotype(alt_counts: usize, depth: usize, error_rate: f64) -> Genotype {
     let homo_ref_prob = Binomial::new(error_rate, depth as u64)
         .unwrap()
         .pmf(alt_counts as u64);
@@ -997,6 +967,7 @@ pub fn workflow(
     num_threads: usize,
     chunk_size: u64,
     error_rate: f64,
+    error_rate_indels: f64,
     stranded_read: &ReadNumber,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting TVC workflow");
@@ -1063,6 +1034,7 @@ pub fn workflow(
                     max_mismatches,
                     min_ao,
                     error_rate,
+                    error_rate_indels,
                     stranded_read,
                 )
                 .unwrap_or_else(|_e| Vec::new());
@@ -1124,6 +1096,7 @@ fn call_variants(
     max_mismatches: u32,
     min_ao: u32,
     error_rate: f64,
+    error_rate_indels: f64,
     stranded_read: &ReadNumber,
 
 ) -> Result<Vec<Variant>, Box<dyn std::error::Error>> {
@@ -1282,7 +1255,7 @@ fn call_variants(
                 if *alt_counts < min_ao as usize {
                     continue;
                 }
-                let genotype = assign_genotype_snps(*alt_counts, total_depth as usize, error_rate);
+                let genotype = assign_genotype(*alt_counts, total_depth as usize, error_rate);
                 if genotype.genotype == "0/0" {
                     continue;
                 }
@@ -1308,8 +1281,7 @@ fn call_variants(
                 if *alt_counts < min_ao as usize {
                     continue;
                 }
-                // Hard coded 0.05 for indels for now
-                let genotype = assign_genotype_indels(*alt_counts, total_depth_indel_adjusted as usize, 0.05);
+                let genotype = assign_genotype(*alt_counts, total_depth_indel_adjusted as usize, error_rate_indels);
                 if genotype.genotype == "0/0" {
                     continue;
                 }
@@ -1347,6 +1319,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let num_threads = args.num_threads;
     let chunk_size = args.chunk_size;
     let error_rate = args.error_rate;
+    let error_rate_indels = args.error_rate_indels;
     let stranded_read = &args.stranded_read;
 
     let level = args.log_level.as_str(); // use the enum value from clap
@@ -1370,6 +1343,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         num_threads,
         chunk_size,
         error_rate,
+        error_rate_indels,
         stranded_read,
     )?;
 
@@ -1427,6 +1401,7 @@ mod tests {
                     10,    // max_mismatches
                     1,     // min_ao
                     0.005, // error_rate
+                    0.05,  // error_rate_indels
                     &$stranded_read,
                 )
                 .expect("call_variants failed");
@@ -1635,6 +1610,7 @@ mod tests {
             10,              // max_mismatches
             1,               // min_ao
             0.005,           // error_rate
+            0.05,            // error_rate_indels
             &ReadNumber::R1, // stranded_read
         )
         .expect("call_variants failed");
@@ -1685,6 +1661,7 @@ mod tests {
             10,              // max_mismatches
             1,               // min_ao
             0.005,           // error_rate
+            0.05,            // error_rate_indels
             &ReadNumber::R1, // stranded_read
         )
         .expect("call_variants failed");
@@ -1732,6 +1709,7 @@ mod tests {
             10,              // max_mismatches
             1,               // min_ao
             0.005,           // error_rate
+            0.05,            // error_rate_indels
             &ReadNumber::R2, // stranded_read
         )
         .expect("call_variants failed");
