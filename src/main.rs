@@ -843,15 +843,13 @@ fn extract_pileup_counts(
     ref_seq: &[u8],
     ref_pos: u32,
     stranded_read: &ReadNumber,
-) -> Counts {
-
-    let mut counts = Counts {
-        fwd: HashMap::new(),
-        rev: HashMap::new(),
-        total: HashMap::new(),
-        indel_offset: HashMap::new(),
-    };
-
+    counts: &mut Counts,
+) {
+    counts.fwd.clear();
+    counts.rev.clear();
+    counts.total.clear();
+    counts.indel_offset.clear();
+    
     for alignment in pileup.alignments() {
         let record = alignment.record();
         let mismatches = get_nm_tag(&record);
@@ -924,8 +922,6 @@ fn extract_pileup_counts(
             }
         }
     }
-
-    counts
 }
 
 /// Main workflow for variant calling
@@ -1092,7 +1088,6 @@ fn call_variants(
     error_rate: f64,
     error_rate_indels: f64,
     stranded_read: &ReadNumber,
-
 ) -> Result<Vec<Variant>, Box<dyn std::error::Error>> {
 
     let mut bam = bam::IndexedReader::from_path(bam_path).expect("Error opening BAM file");
@@ -1107,6 +1102,21 @@ fn call_variants(
 
     let mut variants = Vec::new();
 
+    let mut counts = Counts {
+        fwd: HashMap::with_capacity(8),
+        rev: HashMap::with_capacity(8),
+        total: HashMap::with_capacity(8),
+        indel_offset: HashMap::with_capacity(4),
+    };
+
+    let mut r_one_f_counts_snps   = HashMap::with_capacity(4);
+    let mut r_one_r_counts_snps   = HashMap::with_capacity(4);
+    let mut r_one_f_counts_indels = HashMap::with_capacity(4);
+    let mut r_one_r_counts_indels = HashMap::with_capacity(4);
+
+    let mut total_counts_snps   = HashMap::with_capacity(4);
+    let mut total_counts_indels = HashMap::with_capacity(4);
+
     for result in bam.pileup() {
         let pileup: Pileup = result.expect("Failed to read pileup");
         let tid = pileup.tid();
@@ -1119,7 +1129,7 @@ fn call_variants(
         if depth < min_depth {
             continue;
         }
-        let counts = extract_pileup_counts(
+        extract_pileup_counts(
             &pileup,
             min_bq,
             min_mapq,
@@ -1129,14 +1139,16 @@ fn call_variants(
             ref_seq,
             pos,
             stranded_read,
+            &mut counts,
         );
-        let mut r_one_f_counts_snps   = HashMap::new();
-        let mut r_one_r_counts_snps   = HashMap::new();
-        let mut r_one_f_counts_indels = HashMap::new();
-        let mut r_one_r_counts_indels = HashMap::new();
+        
+        r_one_f_counts_snps.clear();
+        r_one_r_counts_snps.clear();
+        r_one_f_counts_indels.clear();
+        r_one_r_counts_indels.clear();
+        total_counts_snps.clear();
+        total_counts_indels.clear();
 
-        let mut total_counts_snps   = HashMap::new();
-        let mut total_counts_indels = HashMap::new();
         for (obs, count) in &counts.fwd {
             match obs {
                 VariantObservation::Snp { .. } => {
