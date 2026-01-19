@@ -415,6 +415,11 @@ impl VariantObservation {
 
         alt_allele
     }
+
+    fn is_indel(&self) -> bool {
+        matches!(self, VariantObservation::Insertion { .. } | VariantObservation::Deletion { .. })
+
+    }
 }
 
 
@@ -799,7 +804,6 @@ struct Counts {
     fwd: HashMap<VariantObservation, usize>,
     rev: HashMap<VariantObservation, usize>,
     total: HashMap<VariantObservation, usize>,
-    indel_offset: HashMap<VariantObservation, usize>,
 }
 
 /// Returns true if the read should be filtered out for INDEL calling
@@ -1165,19 +1169,18 @@ fn call_variants(
     let mut variants = Vec::new();
 
     let mut counts = Counts {
-        fwd: HashMap::with_capacity(8),
-        rev: HashMap::with_capacity(8),
-        total: HashMap::with_capacity(8),
-        indel_offset: HashMap::with_capacity(4),
+        fwd: HashMap::with_capacity(16),
+        rev: HashMap::with_capacity(16),
+        total: HashMap::with_capacity(16),
     };
 
-    let mut r_one_f_counts_snps   = HashMap::with_capacity(4);
-    let mut r_one_r_counts_snps   = HashMap::with_capacity(4);
-    let mut r_one_f_counts_indels = HashMap::with_capacity(4);
-    let mut r_one_r_counts_indels = HashMap::with_capacity(4);
+    let mut r_one_f_counts_snps   = HashMap::with_capacity(8);
+    let mut r_one_r_counts_snps   = HashMap::with_capacity(8);
+    let mut r_one_f_counts_indels = HashMap::with_capacity(8);
+    let mut r_one_r_counts_indels = HashMap::with_capacity(8);
 
-    let mut total_counts_snps   = HashMap::with_capacity(4);
-    let mut total_counts_indels = HashMap::with_capacity(4);
+    let mut total_counts_snps   = HashMap::with_capacity(8);
+    let mut total_counts_indels = HashMap::with_capacity(8);
 
     for result in bam.pileup() {
         let pileup: Pileup = result.expect("Failed to read pileup");
@@ -1212,38 +1215,26 @@ fn call_variants(
         total_counts_indels.clear();
 
         for (obs, count) in &counts.fwd {
-            match obs {
-                VariantObservation::Snp { .. } => {
-                    r_one_f_counts_snps.insert(obs.clone(), *count);
-                }
-                VariantObservation::Insertion { .. } |
-                VariantObservation::Deletion  { .. } => {
-                    r_one_f_counts_indels.insert(obs.clone(), *count);
-                }
+            if obs.is_indel() {
+                r_one_f_counts_indels.insert(obs.clone(), *count);
+            } else {
+                r_one_f_counts_snps.insert(obs.clone(), *count);
             }
         }
 
         for (obs, count) in &counts.rev {
-            match obs {
-                VariantObservation::Snp { .. } => {
-                    r_one_r_counts_snps.insert(obs.clone(), *count);
-                }
-                VariantObservation::Insertion { .. } |
-                VariantObservation::Deletion  { .. } => {
-                    r_one_r_counts_indels.insert(obs.clone(), *count);
-                }
+            if obs.is_indel() {
+                r_one_r_counts_indels.insert(obs.clone(), *count);
+            } else {
+                r_one_r_counts_snps.insert(obs.clone(), *count);
             }
         }
 
         for (obs, count) in &counts.total {
-            match obs {
-                VariantObservation::Snp { .. } => {
-                    total_counts_snps.insert(obs.clone(), *count);
-                }
-                VariantObservation::Insertion { .. } |
-                VariantObservation::Deletion  { .. } => {
-                    total_counts_indels.insert(obs.clone(), *count);
-                }
+            if obs.is_indel() {
+                total_counts_indels.insert(obs.clone(), *count);
+            } else {
+                total_counts_snps.insert(obs.clone(), *count);
             }
         }
         
@@ -1274,29 +1265,29 @@ fn call_variants(
             downstream_base as char,
         );
 
-        let (candidate_snps, counts_snps): (HashSet<VariantObservation>, HashMap<VariantObservation, usize>) = match directive_snps {
+        let (candidate_snps, counts_snps): (HashSet<VariantObservation>, &HashMap<VariantObservation, usize>) = match directive_snps {
             CallingDirective::ReferenceSiteOb | CallingDirective::DenovoSiteOb => {
-                (r_one_r_candidates_snps.clone(), r_one_r_counts_snps.clone())
+                (r_one_r_candidates_snps, &r_one_r_counts_snps)
             }
             CallingDirective::ReferenceSiteOt | CallingDirective::DenovoSiteOt => {
-                (r_one_f_candidates_snps.clone(), r_one_f_counts_snps.clone())
+                (r_one_f_candidates_snps, &r_one_f_counts_snps)
             }
             CallingDirective::BothStrands => (
                 r_one_f_candidates_snps
                     .intersection(&r_one_r_candidates_snps)
                     .cloned()
                     .collect(),
-                total_counts_snps.clone(),
+                &total_counts_snps,
             ),
         };
         
-        let (candidate_indels, counts_indels): (HashSet<VariantObservation>, HashMap<VariantObservation, usize>) = (
+        let candidate_indels: HashSet<VariantObservation> = 
                 r_one_f_candidates_indels
                     .intersection(&r_one_r_candidates_indels)
                     .cloned()
-                    .collect(),
-                total_counts_indels.clone(),
-        );
+                    .collect();
+                let counts_indels = &total_counts_indels;
+        
 
         let total_depth_snps = counts_snps.values().sum::<usize>() as u64;
         let total_depth_indels = counts_indels.values().sum::<usize>() as u64;
@@ -1310,11 +1301,11 @@ fn call_variants(
         let directive_indels = CallingDirective::BothStrands;
         if !candidate_snps.is_empty() && total_depth_snps >= min_depth as u64 {
             for candidate in candidate_snps {
-                let alt_counts = counts_snps.get(&candidate).unwrap_or(&0);
-                if *alt_counts < min_ao as usize {
+                let alt_counts = counts_snps.get(&candidate).copied().unwrap_or(0);
+                if alt_counts < min_ao as usize {
                     continue;
                 }
-                let genotype = assign_genotype(*alt_counts, total_depth as usize, error_rate);
+                let genotype = assign_genotype(alt_counts, total_depth as usize, error_rate);
                 if genotype.genotype == "0/0" {
                     continue;
                 }
@@ -1327,7 +1318,7 @@ fn call_variants(
                     genotype.genotype,
                     genotype.score,
                     total_depth as u32,
-                    *alt_counts as u32,
+                    alt_counts as u32,
                     directive_snps.clone(),
                 );
                 variants.push(variant);
@@ -1336,11 +1327,11 @@ fn call_variants(
 
         if !candidate_indels.is_empty() && total_depth_indels >= min_depth as u64 {
             for candidate in candidate_indels {
-                let alt_counts = counts_indels.get(&candidate).unwrap_or(&0);
-                if *alt_counts < min_ao as usize {
+                let alt_counts = counts_indels.get(&candidate).copied().unwrap_or(0);
+                if alt_counts < min_ao as usize {
                     continue;
                 }
-                let genotype = assign_genotype(*alt_counts, total_depth_filtered as usize, error_rate_indels);
+                let genotype = assign_genotype(alt_counts, total_depth_filtered as usize, error_rate_indels);
                 if genotype.genotype == "0/0" {
                     continue;
                 }
@@ -1353,7 +1344,7 @@ fn call_variants(
                     genotype.genotype,
                     genotype.score,
                     total_depth_filtered as u32,
-                    *alt_counts as u32,
+                    alt_counts as u32,
                     directive_indels.clone(),
                 );
                 variants.push(variant);
