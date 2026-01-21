@@ -602,10 +602,10 @@ fn find_where_to_call_variants(
 ) -> CallingDirective {
     let alt_candidate_bases: HashSet<char> = alt_candidates
         .iter()
-        .filter_map(|vo| match vo {
+        .map(|vo| match vo {
             VariantObservation::Snp { base, .. }
             | VariantObservation::Insertion { base, .. }
-            | VariantObservation::Deletion { base, .. } => Some(*base),
+            | VariantObservation::Deletion { base, .. } => *base,
         })
         .collect();
 
@@ -871,8 +871,8 @@ fn filter_indels(sequence: &[u8], record: &bam::Record, homopolymer_cutoff: usiz
         } else {
             let first_base = sequence[0];
             let mut ok = true;
-            for i in 1..homopolymer_cutoff {
-                if sequence[i] != first_base {
+            for base in &sequence[0..homopolymer_cutoff] {
+                if *base != first_base {
                     ok = false;
                     break;
                 }
@@ -888,8 +888,8 @@ fn filter_indels(sequence: &[u8], record: &bam::Record, homopolymer_cutoff: usiz
         } else {
             let last_base = sequence[len - 1];
             let mut ok = true;
-            for i in (len - homopolymer_cutoff)..len {
-                if sequence[i] != last_base {
+            for base in &sequence[(len - homopolymer_cutoff)..len] {
+                if *base != last_base {
                     ok = false;
                     break;
                 }
@@ -1361,11 +1361,7 @@ fn call_variants(
         let total_depth_snps = counts_snps.values().sum::<usize>() as u64;
         let total_depth_indels = counts_indels.values().sum::<usize>() as u64;
         let total_depth = total_depth_snps + total_depth_indels;
-        let total_depth_filtered = if total_depth > indel_offset {
-            total_depth - indel_offset
-        } else {
-            0
-        };
+        let total_depth_filtered = total_depth.saturating_sub(indel_offset);
 
         let directive_indels = CallingDirective::BothStrands;
         if !candidate_snps.is_empty() && total_depth_snps >= min_depth as u64 {
@@ -1846,8 +1842,10 @@ mod tests {
     }
 }
 
-#[derive(Debug)]
+#[cfg(test)]
 struct Qualities(Vec<u8>);
+
+#[cfg(test)]
 impl Qualities {
     fn from_bytes(bytes: Vec<u8>) -> Self {
         Qualities(bytes)
