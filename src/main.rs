@@ -338,9 +338,24 @@ impl BaseCall {
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 /// Representation of a variant observation
 enum VariantObservation {
-    Snp { base: char, ref_base: char, deleted_bases: Vec<u8>, insertion_bases: Vec<u8> },
-    Insertion { base: char, ref_base: char, deleted_bases: Vec<u8>, insertion_bases: Vec<u8> },
-    Deletion { base: char, ref_base: char, deleted_bases: Vec<u8>, insertion_bases: Vec<u8>  },
+    Snp {
+        base: char,
+        ref_base: char,
+        deleted_bases: Vec<u8>,
+        insertion_bases: Vec<u8>,
+    },
+    Insertion {
+        base: char,
+        ref_base: char,
+        deleted_bases: Vec<u8>,
+        insertion_bases: Vec<u8>,
+    },
+    Deletion {
+        base: char,
+        ref_base: char,
+        deleted_bases: Vec<u8>,
+        insertion_bases: Vec<u8>,
+    },
 }
 /// Convert a BaseCall to a VariantObservation
 impl From<&BaseCall> for VariantObservation {
@@ -375,19 +390,31 @@ impl VariantObservation {
         let mut ref_allele = String::new();
 
         match self {
-            VariantObservation::Snp { ref_base, deleted_bases, .. } => {
-                ref_allele.push(*ref_base); 
+            VariantObservation::Snp {
+                ref_base,
+                deleted_bases,
+                ..
+            } => {
+                ref_allele.push(*ref_base);
                 if !deleted_bases.is_empty() {
                     ref_allele.push_str(&String::from_utf8_lossy(deleted_bases));
                 }
-            },
-            VariantObservation::Insertion { ref_base, deleted_bases, .. }
-            | VariantObservation::Deletion { ref_base, deleted_bases, .. } => {
-                ref_allele.push(*ref_base); 
+            }
+            VariantObservation::Insertion {
+                ref_base,
+                deleted_bases,
+                ..
+            }
+            | VariantObservation::Deletion {
+                ref_base,
+                deleted_bases,
+                ..
+            } => {
+                ref_allele.push(*ref_base);
                 if !deleted_bases.is_empty() {
                     ref_allele.push_str(&String::from_utf8_lossy(deleted_bases));
                 }
-            },
+            }
         }
 
         ref_allele
@@ -401,11 +428,14 @@ impl VariantObservation {
         let mut alt_allele = String::new();
 
         match self {
-            VariantObservation::Snp { base, .. }
-            | VariantObservation::Deletion { base, .. } => {
+            VariantObservation::Snp { base, .. } | VariantObservation::Deletion { base, .. } => {
                 alt_allele.push(*base); // Deref to get the value of base
             }
-            VariantObservation::Insertion { base, insertion_bases, .. } => {
+            VariantObservation::Insertion {
+                base,
+                insertion_bases,
+                ..
+            } => {
                 alt_allele.push(*base); // Deref to get the value of base
                 if !insertion_bases.is_empty() {
                     alt_allele.push_str(&String::from_utf8_lossy(insertion_bases));
@@ -416,7 +446,6 @@ impl VariantObservation {
         alt_allele
     }
 }
-
 
 impl fmt::Display for BaseCall {
     /// Format the BaseCall for display
@@ -571,14 +600,14 @@ fn find_where_to_call_variants(
     upstream_base: char,
     downstream_base: char,
 ) -> CallingDirective {
-    let alt_candidate_bases: HashSet<char> = alt_candidates.iter().filter_map(|vo| match vo {
-        VariantObservation::Snp { base, .. }
-        | VariantObservation::Insertion { base, .. }
-        | VariantObservation::Deletion { base, .. } => {
-            Some(*base)
-        }
-
-    }).collect();
+    let alt_candidate_bases: HashSet<char> = alt_candidates
+        .iter()
+        .filter_map(|vo| match vo {
+            VariantObservation::Snp { base, .. }
+            | VariantObservation::Insertion { base, .. }
+            | VariantObservation::Deletion { base, .. } => Some(*base),
+        })
+        .collect();
 
     if ref_base == 'C' && downstream_base == 'G' {
         CallingDirective::ReferenceSiteOb
@@ -660,19 +689,35 @@ fn get_count_vec_candidates_snps(
 
     for (variant, &count) in counts.iter() {
         match variant {
-            VariantObservation::Snp { base, ref_base, deleted_bases: _, insertion_bases: _ } 
-                if *base == *ref_base => continue, 
+            VariantObservation::Snp {
+                base,
+                ref_base,
+                deleted_bases: _,
+                insertion_bases: _,
+            } if *base == *ref_base => continue,
 
-            VariantObservation::Snp { base, ref_base: _, deleted_bases: _, insertion_bases: _ } 
-                if *base == 'N' => continue,
+            VariantObservation::Snp {
+                base,
+                ref_base: _,
+                deleted_bases: _,
+                insertion_bases: _,
+            } if *base == 'N' => continue,
 
-            VariantObservation::Insertion { base, ref_base: _, deleted_bases: _, insertion_bases: _ } 
-                if *base == 'N' => continue, 
+            VariantObservation::Insertion {
+                base,
+                ref_base: _,
+                deleted_bases: _,
+                insertion_bases: _,
+            } if *base == 'N' => continue,
 
-            VariantObservation::Deletion { base, ref_base: _, deleted_bases: _, insertion_bases: _ } 
-                if *base == 'N' => continue, 
+            VariantObservation::Deletion {
+                base,
+                ref_base: _,
+                deleted_bases: _,
+                insertion_bases: _,
+            } if *base == 'N' => continue,
 
-            _ => {} 
+            _ => {}
         }
 
         // Calculate p-value for determining if the variant is significant
@@ -702,23 +747,38 @@ fn get_count_vec_candidates_indels(
 
     for (variant, _count) in counts.iter() {
         match variant {
-            VariantObservation::Snp { base, ref_base, deleted_bases: _, insertion_bases: _ } 
-                if *base == *ref_base => continue, 
+            VariantObservation::Snp {
+                base,
+                ref_base,
+                deleted_bases: _,
+                insertion_bases: _,
+            } if *base == *ref_base => continue,
 
-            VariantObservation::Snp { base, ref_base: _, deleted_bases: _, insertion_bases: _ } 
-                if *base == 'N' => continue,
+            VariantObservation::Snp {
+                base,
+                ref_base: _,
+                deleted_bases: _,
+                insertion_bases: _,
+            } if *base == 'N' => continue,
 
-            VariantObservation::Insertion { base, ref_base: _, deleted_bases: _, insertion_bases: _ } 
-                if *base == 'N' => continue, 
+            VariantObservation::Insertion {
+                base,
+                ref_base: _,
+                deleted_bases: _,
+                insertion_bases: _,
+            } if *base == 'N' => continue,
 
-            VariantObservation::Deletion { base, ref_base: _, deleted_bases: _, insertion_bases: _ } 
-                if *base == 'N' => continue, 
+            VariantObservation::Deletion {
+                base,
+                ref_base: _,
+                deleted_bases: _,
+                insertion_bases: _,
+            } if *base == 'N' => continue,
 
-            _ => {} 
+            _ => {}
         }
 
         candidates.insert(variant.clone());
-        
     }
 
     candidates
@@ -804,7 +864,6 @@ struct Counts {
 /// Returns true if the read should be filtered out for INDEL calling
 /// Filters reads with repeated sequences at the ends or soft-clipping
 fn filter_indels(sequence: &[u8], record: &bam::Record, homopolymer_cutoff: usize) -> bool {
-
     let homopolymer_start = {
         let len = sequence.len();
         if len < homopolymer_cutoff {
@@ -871,11 +930,7 @@ fn filter_indels(sequence: &[u8], record: &bam::Record, homopolymer_cutoff: usiz
         found
     };
 
-    homopolymer_start ||
-    homopolymer_end ||
-    dinuc_start ||
-    dinuc_end ||
-    soft_clipped
+    homopolymer_start || homopolymer_end || dinuc_start || dinuc_end || soft_clipped
 }
 
 /// Extract base call counts from a pileup
@@ -907,9 +962,9 @@ fn extract_pileup_counts(
     counts.fwd.clear();
     counts.rev.clear();
     counts.total.clear();
-    
+
     let mut indel_offset = 0;
-    
+
     for alignment in pileup.alignments() {
         let record = alignment.record();
         let mismatches = get_nm_tag(&record);
@@ -955,23 +1010,29 @@ fn extract_pileup_counts(
             let obs = VariantObservation::from(&base_call);
 
             let is_stranded = is_stranded_read(&record, stranded_read);
-            let is_rev_strand = (record.is_reverse() && is_stranded)
-                || (!record.is_reverse() && !is_stranded);
+            let is_rev_strand =
+                (record.is_reverse() && is_stranded) || (!record.is_reverse() && !is_stranded);
 
             if is_rev_strand {
-                counts.rev.entry(obs.clone())
+                counts
+                    .rev
+                    .entry(obs.clone())
                     .and_modify(|c| *c += 1)
                     .or_insert(1);
             } else {
-                counts.fwd.entry(obs.clone())
+                counts
+                    .fwd
+                    .entry(obs.clone())
                     .and_modify(|c| *c += 1)
                     .or_insert(1);
             }
 
-            counts.total.entry(obs.clone())
+            counts
+                .total
+                .entry(obs.clone())
                 .and_modify(|c| *c += 1)
                 .or_insert(1);
-            
+
             if base_call.is_not_indel() && base_call.base == base_call.ref_base {
                 let read_seq = record.seq().as_bytes();
                 if filter_indels(&read_seq, &record, 3) {
@@ -982,7 +1043,6 @@ fn extract_pileup_counts(
     }
 
     indel_offset
-
 }
 
 /// Main workflow for variant calling
@@ -1150,7 +1210,6 @@ fn call_variants(
     error_rate_indels: f64,
     stranded_read: &ReadNumber,
 ) -> Result<Vec<Variant>, Box<dyn std::error::Error>> {
-
     let mut bam = bam::IndexedReader::from_path(bam_path).expect("Error opening BAM file");
 
     let header = bam.header().to_owned();
@@ -1169,12 +1228,12 @@ fn call_variants(
         total: HashMap::with_capacity(8),
     };
 
-    let mut r_one_f_counts_snps   = HashMap::with_capacity(4);
-    let mut r_one_r_counts_snps   = HashMap::with_capacity(4);
+    let mut r_one_f_counts_snps = HashMap::with_capacity(4);
+    let mut r_one_r_counts_snps = HashMap::with_capacity(4);
     let mut r_one_f_counts_indels = HashMap::with_capacity(4);
     let mut r_one_r_counts_indels = HashMap::with_capacity(4);
 
-    let mut total_counts_snps   = HashMap::with_capacity(4);
+    let mut total_counts_snps = HashMap::with_capacity(4);
     let mut total_counts_indels = HashMap::with_capacity(4);
 
     for result in bam.pileup() {
@@ -1201,7 +1260,7 @@ fn call_variants(
             stranded_read,
             &mut counts,
         );
-        
+
         r_one_f_counts_snps.clear();
         r_one_r_counts_snps.clear();
         r_one_f_counts_indels.clear();
@@ -1214,8 +1273,7 @@ fn call_variants(
                 VariantObservation::Snp { .. } => {
                     r_one_f_counts_snps.insert(obs.clone(), *count);
                 }
-                VariantObservation::Insertion { .. } |
-                VariantObservation::Deletion  { .. } => {
+                VariantObservation::Insertion { .. } | VariantObservation::Deletion { .. } => {
                     r_one_f_counts_indels.insert(obs.clone(), *count);
                 }
             }
@@ -1226,8 +1284,7 @@ fn call_variants(
                 VariantObservation::Snp { .. } => {
                     r_one_r_counts_snps.insert(obs.clone(), *count);
                 }
-                VariantObservation::Insertion { .. } |
-                VariantObservation::Deletion  { .. } => {
+                VariantObservation::Insertion { .. } | VariantObservation::Deletion { .. } => {
                     r_one_r_counts_indels.insert(obs.clone(), *count);
                 }
             }
@@ -1238,13 +1295,12 @@ fn call_variants(
                 VariantObservation::Snp { .. } => {
                     total_counts_snps.insert(obs.clone(), *count);
                 }
-                VariantObservation::Insertion { .. } |
-                VariantObservation::Deletion  { .. } => {
+                VariantObservation::Insertion { .. } | VariantObservation::Deletion { .. } => {
                     total_counts_indels.insert(obs.clone(), *count);
                 }
             }
         }
-        
+
         let upstream_base = if pos > 0 {
             ref_seq[pos as usize - 1]
         } else {
@@ -1260,7 +1316,7 @@ fn call_variants(
             get_count_vec_candidates_snps(&r_one_f_counts_snps, ref_base as char, error_rate);
         let r_one_r_candidates_snps =
             get_count_vec_candidates_snps(&r_one_r_counts_snps, ref_base as char, error_rate);
-        let r_one_r_candidates_indels = 
+        let r_one_r_candidates_indels =
             get_count_vec_candidates_indels(&r_one_r_counts_indels, ref_base as char);
         let r_one_f_candidates_indels =
             get_count_vec_candidates_indels(&r_one_f_counts_indels, ref_base as char);
@@ -1272,7 +1328,10 @@ fn call_variants(
             downstream_base as char,
         );
 
-        let (candidate_snps, counts_snps): (HashSet<VariantObservation>, HashMap<VariantObservation, usize>) = match directive_snps {
+        let (candidate_snps, counts_snps): (
+            HashSet<VariantObservation>,
+            HashMap<VariantObservation, usize>,
+        ) = match directive_snps {
             CallingDirective::ReferenceSiteOb | CallingDirective::DenovoSiteOb => {
                 (r_one_r_candidates_snps.clone(), r_one_r_counts_snps.clone())
             }
@@ -1287,13 +1346,16 @@ fn call_variants(
                 total_counts_snps.clone(),
             ),
         };
-        
-        let (candidate_indels, counts_indels): (HashSet<VariantObservation>, HashMap<VariantObservation, usize>) = (
-                r_one_f_candidates_indels
-                    .intersection(&r_one_r_candidates_indels)
-                    .cloned()
-                    .collect(),
-                total_counts_indels.clone(),
+
+        let (candidate_indels, counts_indels): (
+            HashSet<VariantObservation>,
+            HashMap<VariantObservation, usize>,
+        ) = (
+            r_one_f_candidates_indels
+                .intersection(&r_one_r_candidates_indels)
+                .cloned()
+                .collect(),
+            total_counts_indels.clone(),
         );
 
         let total_depth_snps = counts_snps.values().sum::<usize>() as u64;
@@ -1319,7 +1381,7 @@ fn call_variants(
 
                 let variant = Variant::new(
                     ref_name.to_string(),
-                    pos + 1, 
+                    pos + 1,
                     candidate.get_reference_allele(),
                     candidate.get_alternate_allele(),
                     genotype.genotype,
@@ -1338,14 +1400,18 @@ fn call_variants(
                 if *alt_counts < min_ao as usize {
                     continue;
                 }
-                let genotype = assign_genotype(*alt_counts, total_depth_filtered as usize, error_rate_indels);
+                let genotype = assign_genotype(
+                    *alt_counts,
+                    total_depth_filtered as usize,
+                    error_rate_indels,
+                );
                 if genotype.genotype == "0/0" {
                     continue;
                 }
 
                 let variant = Variant::new(
                     ref_name.to_string(),
-                    pos + 1, 
+                    pos + 1,
                     candidate.get_reference_allele(),
                     candidate.get_alternate_allele(),
                     genotype.genotype,
@@ -1412,7 +1478,6 @@ mod tests {
     /// Unit tests for the variant caller
     use super::*;
     use rust_htslib::faidx;
-    
 
     macro_rules! make_variant_test {
         // Macro to create variant calling tests
@@ -1477,7 +1542,6 @@ mod tests {
                 assert_eq!(matching_variant.reference, $ref_base, "REF mismatch");
                 assert_eq!(matching_variant.alt, $alt_base, "ALT mismatch");
                 assert_eq!(matching_variant.genotype, $gt, "GT mismatch");
-                
             }
         };
     }
@@ -1741,9 +1805,7 @@ mod tests {
         let test_ref = "test_assets/chr11.fasta";
         let test_bam = "test_assets/testing_bams/methylation_site_chr11_134755601_134755621.bam";
         // Load reference
-        let ref_reader = faidx::Reader::from_path(test_ref).expect(
-            "Failed to open FASTA",
-        );
+        let ref_reader = faidx::Reader::from_path(test_ref).expect("Failed to open FASTA");
         let contig = "chr11";
         let seq_len = ref_reader.fetch_seq_len(contig);
         let ref_seq: Vec<u8> = ref_reader
@@ -1784,149 +1846,130 @@ mod tests {
     }
 }
 
-    #[derive(Debug)]
-    struct Qualities(Vec<u8>);
-    impl Qualities {
-        fn from_bytes(bytes: Vec<u8>) -> Self {
-            Qualities(bytes)
-        }
+#[derive(Debug)]
+struct Qualities(Vec<u8>);
+impl Qualities {
+    fn from_bytes(bytes: Vec<u8>) -> Self {
+        Qualities(bytes)
     }
+}
 
-    #[test]
-    fn test_homopolymer_read_start() {
-        // Tests the indel filtering function for homopolymers at the start of reads
-        let mut record_with_homopolymer= bam::Record::new();
-        let cigar = bam::record::CigarString::from(vec![
-            Cigar::Match(7),
-        ]);
-        let qname = b"simulated_read";
-        let seq = b"AAATGCC";
-        let quals = Qualities::from_bytes(vec![255; 7]);
-        let qual: Vec<u8> = quals.0;
-        record_with_homopolymer.set(qname, Some(&cigar), seq, &qual);
-        assert!(filter_indels(seq, &record_with_homopolymer, 3));
+#[test]
+fn test_homopolymer_read_start() {
+    // Tests the indel filtering function for homopolymers at the start of reads
+    let mut record_with_homopolymer = bam::Record::new();
+    let cigar = bam::record::CigarString::from(vec![Cigar::Match(7)]);
+    let qname = b"simulated_read";
+    let seq = b"AAATGCC";
+    let quals = Qualities::from_bytes(vec![255; 7]);
+    let qual: Vec<u8> = quals.0;
+    record_with_homopolymer.set(qname, Some(&cigar), seq, &qual);
+    assert!(filter_indels(seq, &record_with_homopolymer, 3));
 
-        let mut record_without_homopolymer= bam::Record::new();
-        let cigar2 = bam::record::CigarString::from(vec![
-            Cigar::Match(7),
-        ]);
-        
-        let qname2 = b"simulated_read";
-        let seq2 = b"AATGCC";
-        let quals2 = Qualities::from_bytes(vec![255; 6]);
-        let qual2: Vec<u8> = quals2.0;
-        record_without_homopolymer.set(qname2, Some(&cigar2), seq2, &qual2);
+    let mut record_without_homopolymer = bam::Record::new();
+    let cigar2 = bam::record::CigarString::from(vec![Cigar::Match(7)]);
 
-        assert!(filter_indels(seq, &record_with_homopolymer, 3));
-        assert!(!filter_indels(seq2, &record_without_homopolymer, 3));
-    }
+    let qname2 = b"simulated_read";
+    let seq2 = b"AATGCC";
+    let quals2 = Qualities::from_bytes(vec![255; 6]);
+    let qual2: Vec<u8> = quals2.0;
+    record_without_homopolymer.set(qname2, Some(&cigar2), seq2, &qual2);
 
+    assert!(filter_indels(seq, &record_with_homopolymer, 3));
+    assert!(!filter_indels(seq2, &record_without_homopolymer, 3));
+}
 
-    #[test]
-    fn test_homopolymer_read_end() {
-        // Tests the indel filtering function for homopolymers at the end of reads
-        let mut record_with_homopolymer= bam::Record::new();
-        let cigar = bam::record::CigarString::from(vec![
-            Cigar::Match(6),
-        ]);
-        let qname = b"simulated_read";
-        let seq = b"GCCTTT";
-        let quals = Qualities::from_bytes(vec![255; 6]);
-        let qual: Vec<u8> = quals.0;
-        record_with_homopolymer.set(qname, Some(&cigar), seq, &qual);
-        assert!(filter_indels(seq, &record_with_homopolymer, 3));
+#[test]
+fn test_homopolymer_read_end() {
+    // Tests the indel filtering function for homopolymers at the end of reads
+    let mut record_with_homopolymer = bam::Record::new();
+    let cigar = bam::record::CigarString::from(vec![Cigar::Match(6)]);
+    let qname = b"simulated_read";
+    let seq = b"GCCTTT";
+    let quals = Qualities::from_bytes(vec![255; 6]);
+    let qual: Vec<u8> = quals.0;
+    record_with_homopolymer.set(qname, Some(&cigar), seq, &qual);
+    assert!(filter_indels(seq, &record_with_homopolymer, 3));
 
-        let mut record_without_homopolymer= bam::Record::new();
-        let cigar2 = bam::record::CigarString::from(vec![
-            Cigar::Match(6),
-        ]);
-        
-        let qname2 = b"simulated_read";
-        let seq2 = b"GCCTT";
-        let quals2 = Qualities::from_bytes(vec![255; 5]);
-        let qual2: Vec<u8> = quals2.0;
-        record_without_homopolymer.set(qname2, Some(&cigar2), seq2, &qual2);
+    let mut record_without_homopolymer = bam::Record::new();
+    let cigar2 = bam::record::CigarString::from(vec![Cigar::Match(6)]);
 
-        assert!(filter_indels(seq, &record_with_homopolymer, 3));
-        assert!(!filter_indels(seq2, &record_without_homopolymer, 3));
-    }
+    let qname2 = b"simulated_read";
+    let seq2 = b"GCCTT";
+    let quals2 = Qualities::from_bytes(vec![255; 5]);
+    let qual2: Vec<u8> = quals2.0;
+    record_without_homopolymer.set(qname2, Some(&cigar2), seq2, &qual2);
 
-    #[test]
-    fn test_dinucleotide_read_start() {
-        // Tests the indel filtering function for dinucleotides at the start of reads
-        let mut record_with_dinucleotide= bam::Record::new();
-        let cigar = bam::record::CigarString::from(vec![
-            Cigar::Match(6),
-        ]);
-        let qname = b"simulated_read";
-        let seq = b"ATATGC";
-        let quals = Qualities::from_bytes(vec![255; 6]);
-        let qual: Vec<u8> = quals.0;
-        record_with_dinucleotide.set(qname, Some(&cigar), seq, &qual);
-        assert!(filter_indels(seq, &record_with_dinucleotide, 3));
-        let mut record_without_dinucleotide= bam::Record::new();
-        let cigar2 = bam::record::CigarString::from(vec![
-            Cigar::Match(6),
-        ]);
-        
-        let qname2 = b"simulated_read";
-        let seq2 = b"ATCGTG";
-        let quals2 = Qualities::from_bytes(vec![255; 6]);
-        let qual2: Vec<u8> = quals2.0;
-        record_without_dinucleotide.set(qname2, Some(&cigar2), seq2, &qual2);
+    assert!(filter_indels(seq, &record_with_homopolymer, 3));
+    assert!(!filter_indels(seq2, &record_without_homopolymer, 3));
+}
 
-        assert!(filter_indels(seq, &record_with_dinucleotide, 3));
-        assert!(!filter_indels(seq2, &record_without_dinucleotide, 3));
-    }
+#[test]
+fn test_dinucleotide_read_start() {
+    // Tests the indel filtering function for dinucleotides at the start of reads
+    let mut record_with_dinucleotide = bam::Record::new();
+    let cigar = bam::record::CigarString::from(vec![Cigar::Match(6)]);
+    let qname = b"simulated_read";
+    let seq = b"ATATGC";
+    let quals = Qualities::from_bytes(vec![255; 6]);
+    let qual: Vec<u8> = quals.0;
+    record_with_dinucleotide.set(qname, Some(&cigar), seq, &qual);
+    assert!(filter_indels(seq, &record_with_dinucleotide, 3));
+    let mut record_without_dinucleotide = bam::Record::new();
+    let cigar2 = bam::record::CigarString::from(vec![Cigar::Match(6)]);
 
-    #[test]
-    fn test_dinucleotide_read_end() {
-        // Tests the indel filtering function for dinucleotides at the end of reads
-        let mut record_with_dinucleotide= bam::Record::new();
-        let cigar = bam::record::CigarString::from(vec![
-            Cigar::Match(6),
-        ]);
-        let qname = b"simulated_read";
-        let seq = b"GCCTTT";
-        let quals = Qualities::from_bytes(vec![255; 6]);
-        let qual: Vec<u8> = quals.0;
-        record_with_dinucleotide.set(qname, Some(&cigar), seq, &qual);
-        assert!(filter_indels(seq, &record_with_dinucleotide, 3));
-        let mut record_without_dinucleotide= bam::Record::new();
-        let cigar2 = bam::record::CigarString::from(vec![
-            Cigar::Match(6),
-        ]);
-        
-        let qname2 = b"simulated_read";
-        let seq2 = b"GCCTTG";
-        let quals2 = Qualities::from_bytes(vec![255; 6]);
-        let qual2: Vec<u8> = quals2.0;
-        record_without_dinucleotide.set(qname2, Some(&cigar2), seq2, &qual2);
+    let qname2 = b"simulated_read";
+    let seq2 = b"ATCGTG";
+    let quals2 = Qualities::from_bytes(vec![255; 6]);
+    let qual2: Vec<u8> = quals2.0;
+    record_without_dinucleotide.set(qname2, Some(&cigar2), seq2, &qual2);
 
-        assert!(filter_indels(seq, &record_with_dinucleotide, 3));
-        assert!(!filter_indels(seq2, &record_without_dinucleotide, 3));
-    }
+    assert!(filter_indels(seq, &record_with_dinucleotide, 3));
+    assert!(!filter_indels(seq2, &record_without_dinucleotide, 3));
+}
 
-    #[test]
-    fn test_check_soft_clip() {
-        // Tests the indel filtering function for soft-clipped reads
-        let mut record = bam::Record::new();
-        let cigar_with_soft_clip = bam::record::CigarString::from(vec![
-            Cigar::SoftClip(5),
-            Cigar::Match(10),
-            Cigar::SoftClip(3),
-        ]);
-        let qname = b"simulated_read";
-        let seq = b"ACGTACGTAC";
-        let quals = Qualities::from_bytes(vec![255; 10]);
-        let qual: Vec<u8> = quals.0;
-        record.set(qname, Some(&cigar_with_soft_clip), seq, &qual);
-        assert!(filter_indels(seq, &record, 3));
+#[test]
+fn test_dinucleotide_read_end() {
+    // Tests the indel filtering function for dinucleotides at the end of reads
+    let mut record_with_dinucleotide = bam::Record::new();
+    let cigar = bam::record::CigarString::from(vec![Cigar::Match(6)]);
+    let qname = b"simulated_read";
+    let seq = b"GCCTTT";
+    let quals = Qualities::from_bytes(vec![255; 6]);
+    let qual: Vec<u8> = quals.0;
+    record_with_dinucleotide.set(qname, Some(&cigar), seq, &qual);
+    assert!(filter_indels(seq, &record_with_dinucleotide, 3));
+    let mut record_without_dinucleotide = bam::Record::new();
+    let cigar2 = bam::record::CigarString::from(vec![Cigar::Match(6)]);
 
-        let mut record_no_soft_clip = bam::Record::new();
-        let cigar_no_soft_clip = bam::record::CigarString::from(vec![
-            Cigar::Match(10),
-        ]);
-        record_no_soft_clip.set(qname, Some(&cigar_no_soft_clip), seq, &qual);
-        assert!(!filter_indels(seq, &record_no_soft_clip, 3));
-    }
+    let qname2 = b"simulated_read";
+    let seq2 = b"GCCTTG";
+    let quals2 = Qualities::from_bytes(vec![255; 6]);
+    let qual2: Vec<u8> = quals2.0;
+    record_without_dinucleotide.set(qname2, Some(&cigar2), seq2, &qual2);
+
+    assert!(filter_indels(seq, &record_with_dinucleotide, 3));
+    assert!(!filter_indels(seq2, &record_without_dinucleotide, 3));
+}
+
+#[test]
+fn test_check_soft_clip() {
+    // Tests the indel filtering function for soft-clipped reads
+    let mut record = bam::Record::new();
+    let cigar_with_soft_clip = bam::record::CigarString::from(vec![
+        Cigar::SoftClip(5),
+        Cigar::Match(10),
+        Cigar::SoftClip(3),
+    ]);
+    let qname = b"simulated_read";
+    let seq = b"ACGTACGTAC";
+    let quals = Qualities::from_bytes(vec![255; 10]);
+    let qual: Vec<u8> = quals.0;
+    record.set(qname, Some(&cigar_with_soft_clip), seq, &qual);
+    assert!(filter_indels(seq, &record, 3));
+
+    let mut record_no_soft_clip = bam::Record::new();
+    let cigar_no_soft_clip = bam::record::CigarString::from(vec![Cigar::Match(10)]);
+    record_no_soft_clip.set(qname, Some(&cigar_no_soft_clip), seq, &qual);
+    assert!(!filter_indels(seq, &record_no_soft_clip, 3));
+}
