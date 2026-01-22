@@ -1009,29 +1009,25 @@ fn extract_pileup_counts(
 
             let obs = VariantObservation::from(&base_call);
 
-            let is_stranded = is_stranded_read(&record, stranded_read);
-            let is_rev_strand =
-                (record.is_reverse() && is_stranded) || (!record.is_reverse() && !is_stranded);
+            let is_stranded_read_status = is_stranded_read(&record, stranded_read);
 
-            if is_rev_strand {
-                counts
-                    .rev
-                    .entry(obs.clone())
-                    .and_modify(|c| *c += 1)
-                    .or_insert(1);
+            if (record.is_reverse() && is_stranded_read_status)
+                || (!record.is_reverse() && !is_stranded_read_status)
+            {
+                counts.rev.insert(
+                    obs.clone(),
+                    counts.rev.get(&obs).unwrap_or(&0) + 1,
+                );
             } else {
-                counts
-                    .fwd
-                    .entry(obs.clone())
-                    .and_modify(|c| *c += 1)
-                    .or_insert(1);
+                counts.fwd.insert(
+                    obs.clone(),
+                    counts.fwd.get(&obs).unwrap_or(&0) + 1,
+                );
             }
-
-            counts
-                .total
-                .entry(obs.clone())
-                .and_modify(|c| *c += 1)
-                .or_insert(1);
+            counts.total.insert(
+                obs.clone(),
+                counts.total.get(&obs).unwrap_or(&0) + 1,
+            );
 
             if base_call.is_not_indel() && base_call.base == base_call.ref_base {
                 let read_seq = record.seq().as_bytes();
