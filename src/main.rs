@@ -1187,10 +1187,8 @@ fn call_variants(
 
         let r_one_f_candidates_snps = get_count_vec_candidates(&r_one_f_counts_snps, error_rate);
         let r_one_r_candidates_snps = get_count_vec_candidates(&r_one_r_counts_snps, error_rate);
-        let r_one_r_candidates_indels =
-            get_count_vec_candidates(&r_one_r_counts_indels, 0.05);
-        let r_one_f_candidates_indels =
-            get_count_vec_candidates(&r_one_f_counts_indels, 0.05);
+        let r_one_r_candidates_indels = get_count_vec_candidates(&r_one_r_counts_indels, 0.05);
+        let r_one_f_candidates_indels = get_count_vec_candidates(&r_one_f_counts_indels, 0.05);
 
         let directive_snps = find_where_to_call_variants(
             ref_base as char,
@@ -1261,11 +1259,7 @@ fn call_variants(
                 if *alt_counts < min_ao as usize {
                     continue;
                 }
-                let genotype = assign_genotype(
-                    *alt_counts,
-                    total_depth_filtered as usize,
-                    0.05,
-                );
+                let genotype = assign_genotype(*alt_counts, total_depth_filtered as usize, 0.05);
                 if genotype.genotype == "0/0" {
                     continue;
                 }
@@ -1386,7 +1380,7 @@ mod tests {
                     1,     // min_ao
                     0.005, // error_rate
                     &$stranded_read,
-                    3,     // unanchored_repeat_read_end_limit
+                    3, // unanchored_repeat_read_end_limit
                 )
                 .expect("call_variants failed");
 
