@@ -719,8 +719,8 @@ fn is_stranded_read(record: &bam::Record, stranded_read: &ReadNumber) -> bool {
 }
 
 #[derive(Debug)]
-/// Counts of variant observations
-struct Counts {
+/// Counts of basecalls in a pileup
+struct PileupCounts {
     fwd: HashMap<BaseCall, usize>,
     rev: HashMap<BaseCall, usize>,
     total: HashMap<BaseCall, usize>,
@@ -822,12 +822,11 @@ fn extract_pileup_counts(
     ref_seq: &[u8],
     ref_pos: u32,
     stranded_read: &ReadNumber,
-    counts: &mut Counts,
+    pileup_counts: &mut PileupCounts,
 ) -> u64 {
-    counts.fwd.clear();
-    counts.rev.clear();
-    counts.total.clear();
-
+    pileup_counts.fwd.clear();
+    pileup_counts.rev.clear();
+    pileup_counts.total.clear();
     let mut indel_offset = 0;
 
     for alignment in pileup.alignments() {
@@ -878,19 +877,19 @@ fn extract_pileup_counts(
             if (record.is_reverse() && is_stranded_read_status)
                 || (!record.is_reverse() && !is_stranded_read_status)
             {
-                counts.rev.insert(
+                pileup_counts.rev.insert(
                     basecall.clone(),
-                    counts.rev.get(&basecall).unwrap_or(&0) + 1,
+                    pileup_counts.rev.get(&basecall).unwrap_or(&0) + 1,
                 );
             } else {
-                counts.fwd.insert(
+                pileup_counts.fwd.insert(
                     basecall.clone(),
-                    counts.fwd.get(&basecall).unwrap_or(&0) + 1,
+                    pileup_counts.fwd.get(&basecall).unwrap_or(&0) + 1,
                 );
             }
-            counts.total.insert(
+            pileup_counts.total.insert(
                 basecall.clone(),
-                counts.total.get(&basecall).unwrap_or(&0) + 1,
+                pileup_counts.total.get(&basecall).unwrap_or(&0) + 1,
             );
 
             if variant_type == VariantObservation::Ref {
@@ -1082,7 +1081,7 @@ fn call_variants(
 
     let mut variants = Vec::new();
 
-    let mut counts = Counts {
+    let mut pileup_counts = PileupCounts {
         fwd: HashMap::with_capacity(8),
         rev: HashMap::with_capacity(8),
         total: HashMap::with_capacity(8),
@@ -1118,7 +1117,7 @@ fn call_variants(
             ref_seq,
             pos,
             stranded_read,
-            &mut counts,
+            &mut pileup_counts,
         );
 
         r_one_f_counts_snps.clear();
@@ -1128,7 +1127,7 @@ fn call_variants(
         total_counts_snps.clear();
         total_counts_indels.clear();
 
-        for (obs, count) in &counts.fwd {
+        for (obs, count) in &pileup_counts.fwd {
             let variant_type = obs.check_variant_type();
             match variant_type {
                 VariantObservation::Snp | VariantObservation::Ref => {
@@ -1143,7 +1142,7 @@ fn call_variants(
             }
         }
 
-        for (obs, count) in &counts.rev {
+        for (obs, count) in &pileup_counts.rev {
             let variant_type = obs.check_variant_type();
             match variant_type {
                 VariantObservation::Snp | VariantObservation::Ref => {
@@ -1158,7 +1157,7 @@ fn call_variants(
             }
         }
 
-        for (obs, count) in &counts.total {
+        for (obs, count) in &pileup_counts.total {
             let variant_type = obs.check_variant_type();
             match variant_type {
                 VariantObservation::Snp | VariantObservation::Ref => {
