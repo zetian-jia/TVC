@@ -89,8 +89,8 @@ struct Args {
     #[arg(short = 'p', long, default_value_t = 0.005)]
     error_rate: f64,
 
-    #[arg(short = 's', long, default_value_t = 0.05)]
-    error_rate_indels: f64,
+    #[arg(short = 'h', long, default_value_t = 3)]
+    unanchored_repeat_read_end_limit: usize,
 
     #[arg(short = 'r', long, value_enum, default_value_t = ReadNumber::R1)]
     stranded_read: ReadNumber,
@@ -823,6 +823,7 @@ fn compute_pileup_counts(
     ref_pos: u32,
     stranded_read: &ReadNumber,
     pileup_counts: &mut PileupCounts,
+    unanchored_repeat_read_end_limit: usize,
 ) -> u64 {
     pileup_counts.fwd.clear();
     pileup_counts.rev.clear();
@@ -894,7 +895,7 @@ fn compute_pileup_counts(
 
             if variant_type == VariantObservation::Ref {
                 let read_seq = record.seq().as_bytes();
-                if filter_indels(&read_seq, &record, 3) {
+                if filter_indels(&read_seq, &record, unanchored_repeat_read_end_limit) {
                     indel_offset += 1;
                 }
             }
@@ -937,8 +938,8 @@ pub fn workflow(
     num_threads: usize,
     chunk_size: u64,
     error_rate: f64,
-    error_rate_indels: f64,
     stranded_read: &ReadNumber,
+    unanchored_repeat_read_end_limit: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting TVC workflow");
     validate_fai_and_bam(ref_path, bam_path)?;
@@ -1004,8 +1005,8 @@ pub fn workflow(
                     max_mismatches,
                     min_ao,
                     error_rate,
-                    error_rate_indels,
                     stranded_read,
+                    unanchored_repeat_read_end_limit,
                 )
                 .unwrap_or_else(|_e| Vec::new());
                 open_files_counter.fetch_sub(1, Ordering::SeqCst);
@@ -1066,8 +1067,8 @@ fn call_variants(
     max_mismatches: u32,
     min_ao: u32,
     error_rate: f64,
-    error_rate_indels: f64,
     stranded_read: &ReadNumber,
+    unanchored_repeat_read_end_limit: usize,
 ) -> Result<Vec<Variant>, Box<dyn std::error::Error>> {
     let mut bam = bam::IndexedReader::from_path(bam_path).expect("Error opening BAM file");
 
@@ -1118,6 +1119,7 @@ fn call_variants(
             pos,
             stranded_read,
             &mut pileup_counts,
+            unanchored_repeat_read_end_limit,
         );
 
         r_one_f_counts_snps.clear();
@@ -1186,9 +1188,9 @@ fn call_variants(
         let r_one_f_candidates_snps = get_count_vec_candidates(&r_one_f_counts_snps, error_rate);
         let r_one_r_candidates_snps = get_count_vec_candidates(&r_one_r_counts_snps, error_rate);
         let r_one_r_candidates_indels =
-            get_count_vec_candidates(&r_one_r_counts_indels, error_rate_indels);
+            get_count_vec_candidates(&r_one_r_counts_indels, 0.05);
         let r_one_f_candidates_indels =
-            get_count_vec_candidates(&r_one_f_counts_indels, error_rate_indels);
+            get_count_vec_candidates(&r_one_f_counts_indels, 0.05);
 
         let directive_snps = find_where_to_call_variants(
             ref_base as char,
@@ -1262,7 +1264,7 @@ fn call_variants(
                 let genotype = assign_genotype(
                     *alt_counts,
                     total_depth_filtered as usize,
-                    error_rate_indels,
+                    0.05,
                 );
                 if genotype.genotype == "0/0" {
                     continue;
@@ -1301,8 +1303,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let num_threads = args.num_threads;
     let chunk_size = args.chunk_size;
     let error_rate = args.error_rate;
-    let error_rate_indels = args.error_rate_indels;
     let stranded_read = &args.stranded_read;
+    let unanchored_repeat_read_end_limit = args.unanchored_repeat_read_end_limit;
 
     let level = args.log_level.as_str(); // use the enum value from clap
 
@@ -1325,8 +1327,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         num_threads,
         chunk_size,
         error_rate,
-        error_rate_indels,
         stranded_read,
+        unanchored_repeat_read_end_limit,
     )?;
 
     Ok(())
@@ -1383,8 +1385,8 @@ mod tests {
                     10,    // max_mismatches
                     1,     // min_ao
                     0.005, // error_rate
-                    0.05,  // error_rate_indels
                     &$stranded_read,
+                    3,     // unanchored_repeat_read_end_limit
                 )
                 .expect("call_variants failed");
 
@@ -1591,8 +1593,8 @@ mod tests {
             10,              // max_mismatches
             1,               // min_ao
             0.005,           // error_rate
-            0.05,            // error_rate_indels
             &ReadNumber::R1, // stranded_read
+            3,               // unanchored_repeat_read_end_limit
         )
         .expect("call_variants failed");
 
@@ -1642,8 +1644,8 @@ mod tests {
             10,              // max_mismatches
             1,               // min_ao
             0.005,           // error_rate
-            0.05,            // error_rate_indels
             &ReadNumber::R1, // stranded_read
+            3,               // unanchored_repeat_read_end_limit
         )
         .expect("call_variants failed");
 
@@ -1688,8 +1690,8 @@ mod tests {
             10,              // max_mismatches
             1,               // min_ao
             0.005,           // error_rate
-            0.05,            // error_rate_indels
             &ReadNumber::R2, // stranded_read
+            3,               // unanchored_repeat_read_end_limit
         )
         .expect("call_variants failed");
         let filtered_variants: Vec<&Variant> = variants
