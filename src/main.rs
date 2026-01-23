@@ -798,7 +798,7 @@ fn filter_indels(sequence: &[u8], record: &bam::Record, homopolymer_cutoff: usiz
     homopolymer_start || homopolymer_end || dinuc_start || dinuc_end || soft_clipped
 }
 
-/// Extract base call counts from a pileup
+/// Compute base call counts from a pileup
 ///
 /// # Arguments
 /// * `pileup` - The pileup to extract counts from
@@ -812,7 +812,7 @@ fn filter_indels(sequence: &[u8], record: &bam::Record, homopolymer_cutoff: usiz
 ///
 /// # Returns
 /// A Counts instance with extracted counts
-fn extract_pileup_counts(
+fn compute_pileup_counts(
     pileup: &Pileup,
     min_bq: usize,
     min_mapq: usize,
@@ -1107,7 +1107,7 @@ fn call_variants(
         if depth < min_depth {
             continue;
         }
-        let indel_offset = extract_pileup_counts(
+        let indel_offset = compute_pileup_counts(
             &pileup,
             min_bq,
             min_mapq,
