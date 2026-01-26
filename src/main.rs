@@ -557,6 +557,49 @@ fn find_where_to_call_variants(
         CallingDirective::BothStrands
     }
 }
+/// Select candidates and counts based on calling directive
+///
+/// # Arguments
+/// * `ref_base` - Reference base at the position
+/// * `upstream_base` - Base upstream of the position
+/// * `downstream_base` - Base downstream of the position
+/// * `fwd_candidates` - Set of forward strand base candidates
+/// * `fwd_counts` - Counts of forward strand base calls
+/// * `rev_candidates` - Set of reverse strand base candidates
+/// * `rev_counts` - Counts of reverse strand base calls
+/// * `total_counts` - Total counts of base calls
+/// # Returns
+///
+/// A tuple containing the selected candidates and their counts
+fn select_candidates_and_counts(
+    ref_base: char,
+    upstream_base: char,
+    downstream_base: char,
+    fwd_candidates: &HashSet<BaseCall>,
+    fwd_counts: &HashMap<BaseCall, usize>,
+    rev_candidates: &HashSet<BaseCall>,
+    rev_counts: &HashMap<BaseCall, usize>,
+    total_counts: &HashMap<BaseCall, usize>,
+) -> (HashSet<BaseCall>, HashMap<BaseCall, usize>) {
+    let directive =
+        find_where_to_call_variants(ref_base, fwd_candidates, upstream_base, downstream_base);
+
+    match directive {
+        CallingDirective::ReferenceSiteOb | CallingDirective::DenovoSiteOb => {
+            (rev_candidates.clone(), rev_counts.clone())
+        }
+        CallingDirective::ReferenceSiteOt | CallingDirective::DenovoSiteOt => {
+            (fwd_candidates.clone(), fwd_counts.clone())
+        }
+        CallingDirective::BothStrands => {
+            let intersection: HashSet<BaseCall> = fwd_candidates
+                .intersection(rev_candidates)
+                .cloned()
+                .collect();
+            (intersection, total_counts.clone())
+        }
+    }
+}
 
 /// Generate the VCF header string based on the BAM header
 ///
@@ -1177,22 +1220,16 @@ fn call_variants(
             downstream_base as char,
         );
 
-        let (candidate_snps, counts_snps): (HashSet<BaseCall>, HashMap<BaseCall, usize>) =
-            match directive_snps {
-                CallingDirective::ReferenceSiteOb | CallingDirective::DenovoSiteOb => {
-                    (r_one_r_candidates_snps.clone(), r_one_r_counts_snps.clone())
-                }
-                CallingDirective::ReferenceSiteOt | CallingDirective::DenovoSiteOt => {
-                    (r_one_f_candidates_snps.clone(), r_one_f_counts_snps.clone())
-                }
-                CallingDirective::BothStrands => (
-                    r_one_f_candidates_snps
-                        .intersection(&r_one_r_candidates_snps)
-                        .cloned()
-                        .collect(),
-                    total_counts_snps.clone(),
-                ),
-            };
+        let (candidate_snps, counts_snps) = select_candidates_and_counts(
+            ref_base as char,
+            upstream_base as char,
+            downstream_base as char,
+            &r_one_f_candidates_snps,
+            &r_one_f_counts_snps,
+            &r_one_r_candidates_snps,
+            &r_one_r_counts_snps,
+            &total_counts_snps,
+        );
 
         let (candidate_indels, counts_indels): (HashSet<BaseCall>, HashMap<BaseCall, usize>) = (
             r_one_f_candidates_indels
