@@ -206,6 +206,7 @@ impl Variant {
                 CallingDirective::ReferenceSiteOt => "REF_OT",
                 CallingDirective::DenovoSiteOt => "DENOVO_OT",
                 CallingDirective::BothStrands => "BOTH",
+                CallingDirective::Indel => "BOTH",
             },
             self.genotype,
             self.depth,
@@ -269,6 +270,7 @@ enum CallingDirective {
     ReferenceSiteOt,
     DenovoSiteOt,
     BothStrands,
+    Indel,
 }
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 /// Types of variant observations
@@ -543,6 +545,15 @@ fn find_where_to_call_variants(
     upstream_base: char,
     downstream_base: char,
 ) -> CallingDirective {
+    if alt_candidates.iter().any(|bc| {
+        matches!(
+            bc.check_variant_type(),
+            VariantObservation::Insertion | VariantObservation::Deletion
+        )
+    }) {
+        return CallingDirective::Indel;
+    }
+
     let alt_candidate_bases: HashSet<char> = alt_candidates.iter().map(|bc| bc.base).collect();
 
     if ref_base == 'C' && downstream_base == 'G' {
@@ -591,7 +602,7 @@ fn select_candidates_and_counts(
         CallingDirective::ReferenceSiteOt | CallingDirective::DenovoSiteOt => {
             (fwd_candidates.clone(), fwd_counts.clone())
         }
-        CallingDirective::BothStrands => {
+        CallingDirective::BothStrands | CallingDirective::Indel => {
             let intersection: HashSet<BaseCall> = fwd_candidates
                 .intersection(rev_candidates)
                 .cloned()
@@ -1231,12 +1242,15 @@ fn call_variants(
             &total_counts_snps,
         );
 
-        let (candidate_indels, counts_indels): (HashSet<BaseCall>, HashMap<BaseCall, usize>) = (
-            r_one_f_candidates_indels
-                .intersection(&r_one_r_candidates_indels)
-                .cloned()
-                .collect(),
-            total_counts_indels.clone(),
+        let (candidate_indels, counts_indels) = select_candidates_and_counts(
+            ref_base as char,
+            upstream_base as char,
+            downstream_base as char,
+            &r_one_f_candidates_indels,
+            &r_one_f_counts_indels,
+            &r_one_r_candidates_indels,
+            &r_one_r_counts_indels,
+            &total_counts_indels,
         );
 
         let total_depth_snps = counts_snps.values().sum::<usize>() as u64;
