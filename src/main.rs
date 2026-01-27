@@ -279,10 +279,14 @@ enum CallingDirective {
 /// * `Snp` - Single nucleotide polymorphism
 /// * `Insertion` - Insertion variant
 /// * `Deletion` - Deletion variant
+/// * `Ref` - Reference allele
+/// * `Complex` - Complex variant
 enum VariantObservation {
     Snp,
     Insertion,
     Deletion,
+    Ref,
+    Complex,
 }
 
 #[derive(Clone, Debug)]
@@ -343,12 +347,22 @@ impl BaseCall {
 
     /// Determine the variant observation type
     fn check_variant_type(&self) -> VariantObservation {
-        if !self.insertion_bases.is_empty() {
+        if self.insertion_bases.is_empty()
+            && self.deleted_bases.is_empty()
+            && self.ref_base != self.base
+        {
+            VariantObservation::Snp
+        } else if !self.insertion_bases.is_empty() {
             VariantObservation::Insertion
         } else if !self.deleted_bases.is_empty() {
             VariantObservation::Deletion
+        } else if self.insertion_bases.is_empty()
+            && self.deleted_bases.is_empty()
+            && self.ref_base == self.base
+        {
+            VariantObservation::Ref
         } else {
-            VariantObservation::Snp
+            VariantObservation::Complex
         }
     }
 
@@ -670,6 +684,14 @@ fn get_count_vec_candidates(
                 clears_filters = false;
             }
 
+            VariantObservation::Ref => {
+                clears_filters = false;
+            }
+
+            VariantObservation::Complex => {
+                clears_filters = false;
+            }
+
             _ => {}
         }
 
@@ -909,26 +931,27 @@ fn compute_pileup_counts(
             if (record.is_reverse() && is_stranded_read_status)
                 || (!record.is_reverse() && !is_stranded_read_status)
             {
-                pileup_counts.rev.insert(
-                    basecall.clone(),
-                    pileup_counts.rev.get(&basecall).unwrap_or(&0) + 1,
-                );
+                pileup_counts
+                    .rev
+                    .entry(basecall.clone())
+                    .and_modify(|c| *c += 1)
+                    .or_insert(1);
             } else {
-                pileup_counts.fwd.insert(
-                    basecall.clone(),
-                    pileup_counts.fwd.get(&basecall).unwrap_or(&0) + 1,
-                );
+                pileup_counts
+                    .fwd
+                    .entry(basecall.clone())
+                    .and_modify(|c| *c += 1)
+                    .or_insert(1);
             }
-            pileup_counts.total.insert(
-                basecall.clone(),
-                pileup_counts.total.get(&basecall).unwrap_or(&0) + 1,
-            );
+            pileup_counts
+                .total
+                .entry(basecall.clone())
+                .and_modify(|c| *c += 1)
+                .or_insert(1);
 
-            if variant_type == VariantObservation::Snp {
+            if variant_type == VariantObservation::Ref {
                 let read_seq = record.seq().as_bytes();
-                if basecall.base == basecall.ref_base
-                    && filter_indels(&read_seq, &record, unanchored_repeat_read_end_limit)
-                {
+                if filter_indels(&read_seq, &record, unanchored_repeat_read_end_limit) {
                     indel_offset += 1;
                 }
             }
@@ -1084,11 +1107,14 @@ fn distribute_counts(
 ) {
     for (obs, count) in pileup_map {
         match obs.check_variant_type() {
-            VariantObservation::Snp => {
+            VariantObservation::Snp | VariantObservation::Ref => {
                 snp_map.insert(obs.clone(), *count);
             }
             VariantObservation::Insertion | VariantObservation::Deletion => {
                 indel_map.insert(obs.clone(), *count);
+            }
+            VariantObservation::Complex => {
+                continue;
             }
         }
     }
