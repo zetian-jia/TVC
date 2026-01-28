@@ -1276,7 +1276,7 @@ fn call_variants(
         let total_depth_indels = counts_indels.values().sum::<usize>() as u64;
         let total_depth = total_depth_snps + total_depth_indels;
         let total_depth_filtered = total_depth.saturating_sub(indel_offset);
-        let directive_indels = CallingDirective::BothStrands;
+        let directive_indels = CallingDirective::Indel;
         if !candidate_snps.is_empty() && total_depth_snps >= min_depth as u64 {
             for candidate in candidate_snps {
                 let alt_counts = counts_snps.get(&candidate).unwrap_or(&0);
@@ -1309,7 +1309,7 @@ fn call_variants(
                 if *alt_counts < min_ao as usize {
                     continue;
                 }
-                let genotype = assign_genotype(*alt_counts, total_depth_filtered as usize, 0.05);
+                let genotype = assign_genotype(*alt_counts, total_depth as usize, error_rate);
                 if genotype.genotype == "0/0" {
                     continue;
                 }
