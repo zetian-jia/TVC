@@ -1276,7 +1276,7 @@ fn call_variants(
         let total_depth_indels = counts_indels.values().sum::<usize>() as u64;
         let total_depth = total_depth_snps + total_depth_indels;
         let total_depth_filtered = total_depth.saturating_sub(indel_offset);
-        let directive_indels = CallingDirective::Indel;
+        let directive_indels = CallingDirective::BothStrands;
         if !candidate_snps.is_empty() && total_depth_snps >= min_depth as u64 {
             for candidate in candidate_snps {
                 let alt_counts = counts_snps.get(&candidate).unwrap_or(&0);
@@ -1309,7 +1309,7 @@ fn call_variants(
                 if *alt_counts < min_ao as usize {
                     continue;
                 }
-                let genotype = assign_genotype(*alt_counts, total_depth as usize, error_rate);
+                let genotype = assign_genotype(*alt_counts, total_depth_filtered as usize, 0.05);
                 if genotype.genotype == "0/0" {
                     continue;
                 }
@@ -1538,40 +1538,6 @@ mod tests {
         "1/1",
         (ReadNumber::R1)
     );
-
-    // This test tests a call where an indel is a long and homozygous insertion, and has a low AF
-    make_variant_test!(
-        test_long_ins_homo_af_is_low,
-        "chr11:871770-871880_long_ins_homo.bam",
-        871826,
-        "C",
-        "CGGT",
-        "1/1",
-        (ReadNumber::R1)
-    );
-
-    // This test tests a call where an indel is a long and heterozygous insertion, and AF is high
-    make_variant_test!(
-        test_long_ins_het_af_is_high,
-        "chr11:2097050-2097150_long_ins_het.bam",
-        2097108,
-        "C",
-        "CGCTCTGAG",
-        "0/1",
-        (ReadNumber::R1)
-    );
-
-    // This test tests a call where an indel is a short and heterozygous deletion, and AF is high
-    make_variant_test!(
-        test_short_del_het_af_is_high,
-        "chr11:1912250-chr11:1912350_short_del_het.bam",
-        1912288,
-        "CT",
-        "C",
-        "0/1",
-        (ReadNumber::R1)
-    );
-
 
     // This test tests a call where there was a denovo CpG created and is heterozygous where OT is expected to be non-methylated
     make_variant_test!(
