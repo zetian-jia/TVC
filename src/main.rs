@@ -286,7 +286,6 @@ enum VariantObservation {
     Insertion,
     Deletion,
     Ref,
-    Complex,
 }
 
 #[derive(Clone, Debug)]
@@ -362,7 +361,7 @@ impl BaseCall {
         {
             VariantObservation::Ref
         } else {
-            VariantObservation::Complex
+            panic!("Unexpected variant observed");
         }
     }
 
@@ -685,10 +684,6 @@ fn get_count_vec_candidates(
             }
 
             VariantObservation::Ref => {
-                clears_filters = false;
-            }
-
-            VariantObservation::Complex => {
                 clears_filters = false;
             }
 
@@ -1099,9 +1094,6 @@ fn distribute_counts(
             }
             VariantObservation::Insertion | VariantObservation::Deletion => {
                 indel_map.insert(obs.clone(), *count);
-            }
-            VariantObservation::Complex => {
-                continue;
             }
         }
     }
