@@ -90,7 +90,7 @@ struct Args {
     error_rate: f64,
 
     #[arg(short = 'h', long, default_value_t = 3)]
-    unanchored_repeat_read_end_limit: usize,
+    indel_filter_repeat_limit: usize,
 
     #[arg(short = 'r', long, value_enum, default_value_t = ReadNumber::R1)]
     stranded_read: ReadNumber,
@@ -779,76 +779,50 @@ struct PileupCounts {
     rev: HashMap<BaseCall, usize>,
     total: HashMap<BaseCall, usize>,
 }
-/// Returns true if the read should be filtered out for INDEL calling
-/// Filters reads with repeated sequences at the ends or soft-clipping
-fn filter_indels(sequence: &[u8], record: &bam::Record, homopolymer_cutoff: usize) -> bool {
-    let homopolymer_start = {
-        let len = sequence.len();
-        if len < homopolymer_cutoff {
-            false
-        } else {
-            let first_base = sequence[0];
-            let mut ok = true;
-            for base in &sequence[0..homopolymer_cutoff] {
-                if *base != first_base {
-                    ok = false;
-                    break;
-                }
-            }
-            ok
-        }
-    };
-
-    let homopolymer_end = {
-        let len = sequence.len();
-        if len < homopolymer_cutoff {
-            false
-        } else {
-            let last_base = sequence[len - 1];
-            let mut ok = true;
-            for base in &sequence[(len - homopolymer_cutoff)..len] {
-                if *base != last_base {
-                    ok = false;
-                    break;
-                }
-            }
-            ok
-        }
-    };
-
-    let dinuc_start = {
-        if sequence.len() < 4 {
-            false
-        } else {
-            let first_two = &sequence[0..2];
-            sequence[2..4] == *first_two
-        }
-    };
-
-    let dinuc_end = {
-        let len = sequence.len();
-        if len < 4 {
-            false
-        } else {
-            let start_index = len - 4;
-            let end_index = len - 2;
-            let last_two = &sequence[len - 2..];
-            sequence[start_index..end_index] == *last_two
-        }
-    };
-
-    let soft_clipped = {
-        let mut found = false;
-        for op in record.cigar().iter() {
-            if let Cigar::SoftClip(_) = op {
-                found = true;
+/// Returns true if a slice has a repeated pattern of length n
+/// at the start or end, with at least cutoff bases.
+fn has_repeat(sequence: &[u8], n: usize, cutoff: usize) -> bool {
+    let len = sequence.len();
+    if len < cutoff || n == 0 {
+        return false;
+    }
+    // Check start
+    if len >= cutoff {
+        let mut start_ok = true;
+        for i in (0..cutoff).step_by(n) {
+            if sequence[i..i + n] != sequence[0..n] {
+                start_ok = false;
                 break;
             }
         }
-        found
-    };
+        if start_ok {
+            return true;
+        }
+    }
 
-    homopolymer_start || homopolymer_end || dinuc_start || dinuc_end || soft_clipped
+    // Check end
+    if len >= cutoff {
+        let mut end_ok = true;
+        for i in (len - cutoff..len).step_by(n) {
+            if sequence[i..i + n] != sequence[len - n..len] {
+                end_ok = false;
+                break;
+            }
+        }
+        if end_ok {
+            return true;
+        }
+    }
+    false
+}
+
+/// Returns true if the read should be filtered out for INDEL calling
+/// Filters reads with repeated sequences at the ends or soft-clipping
+fn filter_indels(sequence: &[u8], record: &bam::Record, indel_filter_repeat_limit: usize, dinuc_cutoff: usize) -> bool {
+    let homopolymer = has_repeat(sequence, 1, indel_filter_repeat_limit);
+    let dinuc = has_repeat(sequence, 2, dinuc_cutoff);
+    let soft_clipped = record.cigar().iter().any(|op| matches!(op, bam::record::Cigar::SoftClip(_)));
+    homopolymer || dinuc || soft_clipped
 }
 
 /// Compute base call counts from a pileup
@@ -876,7 +850,8 @@ fn compute_pileup_counts(
     ref_pos: u32,
     stranded_read: &ReadNumber,
     pileup_counts: &mut PileupCounts,
-    unanchored_repeat_read_end_limit: usize,
+    indel_filter_repeat_limit: usize,
+    dinuc_cutoff: usize,
 ) -> u64 {
     pileup_counts.fwd.clear();
     pileup_counts.rev.clear();
@@ -951,7 +926,7 @@ fn compute_pileup_counts(
 
             if variant_type == VariantObservation::Ref {
                 let read_seq = record.seq().as_bytes();
-                if filter_indels(&read_seq, &record, unanchored_repeat_read_end_limit) {
+                if filter_indels(&read_seq, &record, indel_filter_repeat_limit, dinuc_cutoff) {
                     indel_offset += 1;
                 }
             }
@@ -995,7 +970,7 @@ pub fn workflow(
     chunk_size: u64,
     error_rate: f64,
     stranded_read: &ReadNumber,
-    unanchored_repeat_read_end_limit: usize,
+    indel_filter_repeat_limit: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting TVC workflow");
     validate_fai_and_bam(ref_path, bam_path)?;
@@ -1062,7 +1037,7 @@ pub fn workflow(
                     min_ao,
                     error_rate,
                     stranded_read,
-                    unanchored_repeat_read_end_limit,
+                    indel_filter_repeat_limit,
                 )
                 .unwrap_or_else(|_e| Vec::new());
                 open_files_counter.fetch_sub(1, Ordering::SeqCst);
@@ -1150,7 +1125,7 @@ fn call_variants(
     min_ao: u32,
     error_rate: f64,
     stranded_read: &ReadNumber,
-    unanchored_repeat_read_end_limit: usize,
+    indel_filter_repeat_limit: usize,
 ) -> Result<Vec<Variant>, Box<dyn std::error::Error>> {
     let mut bam = bam::IndexedReader::from_path(bam_path).expect("Error opening BAM file");
 
@@ -1190,6 +1165,12 @@ fn call_variants(
         if depth < min_depth {
             continue;
         }
+        let dinuc_cutoff = if indel_filter_repeat_limit % 2 != 0 {
+            indel_filter_repeat_limit + 1
+        } else {
+            indel_filter_repeat_limit
+        };
+
         let indel_offset = compute_pileup_counts(
             &pileup,
             min_bq,
@@ -1201,7 +1182,8 @@ fn call_variants(
             pos,
             stranded_read,
             &mut pileup_counts,
-            unanchored_repeat_read_end_limit,
+            indel_filter_repeat_limit,
+            dinuc_cutoff,
         );
 
         r_one_f_counts_snps.clear();
@@ -1348,7 +1330,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let chunk_size = args.chunk_size;
     let error_rate = args.error_rate;
     let stranded_read = &args.stranded_read;
-    let unanchored_repeat_read_end_limit = args.unanchored_repeat_read_end_limit;
+    let indel_filter_repeat_limit = args.indel_filter_repeat_limit;
 
     let level = args.log_level.as_str(); // use the enum value from clap
 
@@ -1372,7 +1354,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         chunk_size,
         error_rate,
         stranded_read,
-        unanchored_repeat_read_end_limit,
+        indel_filter_repeat_limit,
     )?;
 
     Ok(())
@@ -1430,7 +1412,7 @@ mod tests {
                     1,     // min_ao
                     0.005, // error_rate
                     &$stranded_read,
-                    3, // unanchored_repeat_read_end_limit
+                    3, // indel_filter_repeat_limit
                 )
                 .expect("call_variants failed");
 
@@ -1638,7 +1620,7 @@ mod tests {
             1,               // min_ao
             0.005,           // error_rate
             &ReadNumber::R1, // stranded_read
-            3,               // unanchored_repeat_read_end_limit
+            3,               // indel_filter_repeat_limit
         )
         .expect("call_variants failed");
 
@@ -1689,7 +1671,7 @@ mod tests {
             1,               // min_ao
             0.005,           // error_rate
             &ReadNumber::R1, // stranded_read
-            3,               // unanchored_repeat_read_end_limit
+            3,               // indel_filter_repeat_limit
         )
         .expect("call_variants failed");
 
@@ -1735,7 +1717,7 @@ mod tests {
             1,               // min_ao
             0.005,           // error_rate
             &ReadNumber::R2, // stranded_read
-            3,               // unanchored_repeat_read_end_limit
+            3,               // indel_filter_repeat_limit
         )
         .expect("call_variants failed");
         let filtered_variants: Vec<&Variant> = variants
@@ -1771,7 +1753,7 @@ fn test_homopolymer_read_start() {
     let quals = Qualities::from_bytes(vec![255; 7]);
     let qual: Vec<u8> = quals.0;
     record_with_homopolymer.set(qname, Some(&cigar), seq, &qual);
-    assert!(filter_indels(seq, &record_with_homopolymer, 3));
+    assert!(filter_indels(seq, &record_with_homopolymer, 3, 4));
 
     let mut record_without_homopolymer = bam::Record::new();
     let cigar2 = bam::record::CigarString::from(vec![Cigar::Match(7)]);
@@ -1782,8 +1764,8 @@ fn test_homopolymer_read_start() {
     let qual2: Vec<u8> = quals2.0;
     record_without_homopolymer.set(qname2, Some(&cigar2), seq2, &qual2);
 
-    assert!(filter_indels(seq, &record_with_homopolymer, 3));
-    assert!(!filter_indels(seq2, &record_without_homopolymer, 3));
+    assert!(filter_indels(seq, &record_with_homopolymer, 3, 4));
+    assert!(!filter_indels(seq2, &record_without_homopolymer, 3, 4));
 }
 
 #[test]
@@ -1796,7 +1778,7 @@ fn test_homopolymer_read_end() {
     let quals = Qualities::from_bytes(vec![255; 6]);
     let qual: Vec<u8> = quals.0;
     record_with_homopolymer.set(qname, Some(&cigar), seq, &qual);
-    assert!(filter_indels(seq, &record_with_homopolymer, 3));
+    assert!(filter_indels(seq, &record_with_homopolymer, 3, 4));
 
     let mut record_without_homopolymer = bam::Record::new();
     let cigar2 = bam::record::CigarString::from(vec![Cigar::Match(6)]);
@@ -1807,8 +1789,8 @@ fn test_homopolymer_read_end() {
     let qual2: Vec<u8> = quals2.0;
     record_without_homopolymer.set(qname2, Some(&cigar2), seq2, &qual2);
 
-    assert!(filter_indels(seq, &record_with_homopolymer, 3));
-    assert!(!filter_indels(seq2, &record_without_homopolymer, 3));
+    assert!(filter_indels(seq, &record_with_homopolymer, 3, 4));
+    assert!(!filter_indels(seq2, &record_without_homopolymer, 3, 4));
 }
 
 #[test]
@@ -1821,7 +1803,7 @@ fn test_dinucleotide_read_start() {
     let quals = Qualities::from_bytes(vec![255; 6]);
     let qual: Vec<u8> = quals.0;
     record_with_dinucleotide.set(qname, Some(&cigar), seq, &qual);
-    assert!(filter_indels(seq, &record_with_dinucleotide, 3));
+    assert!(filter_indels(seq, &record_with_dinucleotide, 3, 4));
     let mut record_without_dinucleotide = bam::Record::new();
     let cigar2 = bam::record::CigarString::from(vec![Cigar::Match(6)]);
 
@@ -1831,8 +1813,8 @@ fn test_dinucleotide_read_start() {
     let qual2: Vec<u8> = quals2.0;
     record_without_dinucleotide.set(qname2, Some(&cigar2), seq2, &qual2);
 
-    assert!(filter_indels(seq, &record_with_dinucleotide, 3));
-    assert!(!filter_indels(seq2, &record_without_dinucleotide, 3));
+    assert!(filter_indels(seq, &record_with_dinucleotide, 3, 4));
+    assert!(!filter_indels(seq2, &record_without_dinucleotide, 3, 4));
 }
 
 #[test]
@@ -1845,7 +1827,7 @@ fn test_dinucleotide_read_end() {
     let quals = Qualities::from_bytes(vec![255; 6]);
     let qual: Vec<u8> = quals.0;
     record_with_dinucleotide.set(qname, Some(&cigar), seq, &qual);
-    assert!(filter_indels(seq, &record_with_dinucleotide, 3));
+    assert!(filter_indels(seq, &record_with_dinucleotide, 3, 4));
     let mut record_without_dinucleotide = bam::Record::new();
     let cigar2 = bam::record::CigarString::from(vec![Cigar::Match(6)]);
 
@@ -1855,8 +1837,8 @@ fn test_dinucleotide_read_end() {
     let qual2: Vec<u8> = quals2.0;
     record_without_dinucleotide.set(qname2, Some(&cigar2), seq2, &qual2);
 
-    assert!(filter_indels(seq, &record_with_dinucleotide, 3));
-    assert!(!filter_indels(seq2, &record_without_dinucleotide, 3));
+    assert!(filter_indels(seq, &record_with_dinucleotide, 3, 4));
+    assert!(!filter_indels(seq2, &record_without_dinucleotide, 3, 4));
 }
 
 #[test]
@@ -1873,10 +1855,10 @@ fn test_check_soft_clip() {
     let quals = Qualities::from_bytes(vec![255; 10]);
     let qual: Vec<u8> = quals.0;
     record.set(qname, Some(&cigar_with_soft_clip), seq, &qual);
-    assert!(filter_indels(seq, &record, 3));
+    assert!(filter_indels(seq, &record, 3, 4));
 
     let mut record_no_soft_clip = bam::Record::new();
     let cigar_no_soft_clip = bam::record::CigarString::from(vec![Cigar::Match(10)]);
     record_no_soft_clip.set(qname, Some(&cigar_no_soft_clip), seq, &qual);
-    assert!(!filter_indels(seq, &record_no_soft_clip, 3));
+    assert!(!filter_indels(seq, &record_no_soft_clip, 3, 4));
 }
